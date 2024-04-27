@@ -4,15 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/attribute"
 )
 
-func Use00(fn func(context.Context), name string, opts ...trace.SpanStartOption) func(context.Context) {
+// Use00 add span when context not nil
+func Use00(fn func(context.Context), pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) {
 	return func(ctx context.Context) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -23,12 +23,13 @@ func Use00(fn func(context.Context), name string, opts ...trace.SpanStartOption)
 		}
 	}
 }
-func UseErr00(fn func(context.Context) error, name string, opts ...trace.SpanStartOption) func(context.Context) error {
+
+// UseErr00 add span when context not nil
+func UseErr00(fn func(context.Context) error, pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) error {
 	return func(ctx context.Context) (err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -50,12 +51,56 @@ func UseErr00(fn func(context.Context) error, name string, opts ...trace.SpanSta
 	}
 }
 
-func Use01[R1 any](fn func(context.Context) R1, name string, opts ...trace.SpanStartOption) func(context.Context) R1 {
-	return func(ctx context.Context) (r1 R1) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption00 add span when context contains Telemetry
+func UseOption00(fn func(context.Context), sp SpanProviderFn) func(context.Context) {
+	return func(ctx context.Context) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			fn(cx)
+		} else {
+			fn(ctx)
+		}
+	}
+}
+
+// UseOptionErr00 add span when context contains Telemetry
+func UseOptionErr00(fn func(context.Context) error, sp SpanProviderFn) func(context.Context) error {
+	return func(ctx context.Context) (err error) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			err = fn(cx)
+		} else {
+			err = fn(ctx)
+		}
+		return
+	}
+}
+
+// Use01 add span when context not nil
+func Use01[R1 any](fn func(context.Context) R1, pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) R1 {
+	return func(ctx context.Context) (r1 R1) {
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -67,12 +112,13 @@ func Use01[R1 any](fn func(context.Context) R1, name string, opts ...trace.SpanS
 		return
 	}
 }
-func UseErr01[R1 any](fn func(context.Context) (R1, error), name string, opts ...trace.SpanStartOption) func(context.Context) (R1, error) {
+
+// UseErr01 add span when context not nil
+func UseErr01[R1 any](fn func(context.Context) (R1, error), pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) (R1, error) {
 	return func(ctx context.Context) (r1 R1, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -80,7 +126,7 @@ func UseErr01[R1 any](fn func(context.Context) (R1, error), name string, opts ..
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -94,12 +140,57 @@ func UseErr01[R1 any](fn func(context.Context) (R1, error), name string, opts ..
 	}
 }
 
-func Use02[R1, R2 any](fn func(context.Context) (R1, R2), name string, opts ...trace.SpanStartOption) func(context.Context) (R1, R2) {
-	return func(ctx context.Context) (r1 R1, r2 R2) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption01 add span when context contains Telemetry
+func UseOption01[R1 any](fn func(context.Context) R1, sp SpanProviderFn) func(context.Context) R1 {
+	return func(ctx context.Context) (r1 R1) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1 = fn(cx)
+		} else {
+			r1 = fn(ctx)
+		}
+		return
+	}
+}
+
+// UseOptionErr01 add span when context contains Telemetry
+func UseOptionErr01[R1 any](fn func(context.Context) (R1, error), sp SpanProviderFn) func(context.Context) (R1, error) {
+	return func(ctx context.Context) (r1 R1, err error) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, err = fn(cx)
+		} else {
+			r1, err = fn(ctx)
+		}
+		return
+	}
+}
+
+// Use02 add span when context not nil
+func Use02[R1, R2 any](fn func(context.Context) (R1, R2), pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) (R1, R2) {
+	return func(ctx context.Context) (r1 R1, r2 R2) {
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -111,12 +202,13 @@ func Use02[R1, R2 any](fn func(context.Context) (R1, R2), name string, opts ...t
 		return
 	}
 }
-func UseErr02[R1, R2 any](fn func(context.Context) (R1, R2, error), name string, opts ...trace.SpanStartOption) func(context.Context) (R1, R2, error) {
+
+// UseErr02 add span when context not nil
+func UseErr02[R1, R2 any](fn func(context.Context) (R1, R2, error), pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) (R1, R2, error) {
 	return func(ctx context.Context) (r1 R1, r2 R2, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -124,7 +216,7 @@ func UseErr02[R1, R2 any](fn func(context.Context) (R1, R2, error), name string,
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -138,12 +230,57 @@ func UseErr02[R1, R2 any](fn func(context.Context) (R1, R2, error), name string,
 	}
 }
 
-func Use03[R1, R2, R3 any](fn func(context.Context) (R1, R2, R3), name string, opts ...trace.SpanStartOption) func(context.Context) (R1, R2, R3) {
-	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption02 add span when context contains Telemetry
+func UseOption02[R1, R2 any](fn func(context.Context) (R1, R2), sp SpanProviderFn) func(context.Context) (R1, R2) {
+	return func(ctx context.Context) (r1 R1, r2 R2) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2 = fn(cx)
+		} else {
+			r1, r2 = fn(ctx)
+		}
+		return
+	}
+}
+
+// UseOptionErr02 add span when context contains Telemetry
+func UseOptionErr02[R1, R2 any](fn func(context.Context) (R1, R2, error), sp SpanProviderFn) func(context.Context) (R1, R2, error) {
+	return func(ctx context.Context) (r1 R1, r2 R2, err error) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, err = fn(cx)
+		} else {
+			r1, r2, err = fn(ctx)
+		}
+		return
+	}
+}
+
+// Use03 add span when context not nil
+func Use03[R1, R2, R3 any](fn func(context.Context) (R1, R2, R3), pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) (R1, R2, R3) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3) {
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -155,12 +292,13 @@ func Use03[R1, R2, R3 any](fn func(context.Context) (R1, R2, R3), name string, o
 		return
 	}
 }
-func UseErr03[R1, R2, R3 any](fn func(context.Context) (R1, R2, R3, error), name string, opts ...trace.SpanStartOption) func(context.Context) (R1, R2, R3, error) {
+
+// UseErr03 add span when context not nil
+func UseErr03[R1, R2, R3 any](fn func(context.Context) (R1, R2, R3, error), pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) (R1, R2, R3, error) {
 	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -168,7 +306,7 @@ func UseErr03[R1, R2, R3 any](fn func(context.Context) (R1, R2, R3, error), name
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -182,12 +320,57 @@ func UseErr03[R1, R2, R3 any](fn func(context.Context) (R1, R2, R3, error), name
 	}
 }
 
-func Use04[R1, R2, R3, R4 any](fn func(context.Context) (R1, R2, R3, R4), name string, opts ...trace.SpanStartOption) func(context.Context) (R1, R2, R3, R4) {
-	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption03 add span when context contains Telemetry
+func UseOption03[R1, R2, R3 any](fn func(context.Context) (R1, R2, R3), sp SpanProviderFn) func(context.Context) (R1, R2, R3) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3 = fn(cx)
+		} else {
+			r1, r2, r3 = fn(ctx)
+		}
+		return
+	}
+}
+
+// UseOptionErr03 add span when context contains Telemetry
+func UseOptionErr03[R1, R2, R3 any](fn func(context.Context) (R1, R2, R3, error), sp SpanProviderFn) func(context.Context) (R1, R2, R3, error) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, err error) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, err = fn(cx)
+		} else {
+			r1, r2, r3, err = fn(ctx)
+		}
+		return
+	}
+}
+
+// Use04 add span when context not nil
+func Use04[R1, R2, R3, R4 any](fn func(context.Context) (R1, R2, R3, R4), pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -199,12 +382,13 @@ func Use04[R1, R2, R3, R4 any](fn func(context.Context) (R1, R2, R3, R4), name s
 		return
 	}
 }
-func UseErr04[R1, R2, R3, R4 any](fn func(context.Context) (R1, R2, R3, R4, error), name string, opts ...trace.SpanStartOption) func(context.Context) (R1, R2, R3, R4, error) {
+
+// UseErr04 add span when context not nil
+func UseErr04[R1, R2, R3, R4 any](fn func(context.Context) (R1, R2, R3, R4, error), pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, error) {
 	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -212,7 +396,7 @@ func UseErr04[R1, R2, R3, R4 any](fn func(context.Context) (R1, R2, R3, R4, erro
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -226,12 +410,57 @@ func UseErr04[R1, R2, R3, R4 any](fn func(context.Context) (R1, R2, R3, R4, erro
 	}
 }
 
-func Use05[R1, R2, R3, R4, R5 any](fn func(context.Context) (R1, R2, R3, R4, R5), name string, opts ...trace.SpanStartOption) func(context.Context) (R1, R2, R3, R4, R5) {
-	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption04 add span when context contains Telemetry
+func UseOption04[R1, R2, R3, R4 any](fn func(context.Context) (R1, R2, R3, R4), sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4 = fn(cx)
+		} else {
+			r1, r2, r3, r4 = fn(ctx)
+		}
+		return
+	}
+}
+
+// UseOptionErr04 add span when context contains Telemetry
+func UseOptionErr04[R1, R2, R3, R4 any](fn func(context.Context) (R1, R2, R3, R4, error), sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, error) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, err = fn(cx)
+		} else {
+			r1, r2, r3, r4, err = fn(ctx)
+		}
+		return
+	}
+}
+
+// Use05 add span when context not nil
+func Use05[R1, R2, R3, R4, R5 any](fn func(context.Context) (R1, R2, R3, R4, R5), pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -243,12 +472,13 @@ func Use05[R1, R2, R3, R4, R5 any](fn func(context.Context) (R1, R2, R3, R4, R5)
 		return
 	}
 }
-func UseErr05[R1, R2, R3, R4, R5 any](fn func(context.Context) (R1, R2, R3, R4, R5, error), name string, opts ...trace.SpanStartOption) func(context.Context) (R1, R2, R3, R4, R5, error) {
+
+// UseErr05 add span when context not nil
+func UseErr05[R1, R2, R3, R4, R5 any](fn func(context.Context) (R1, R2, R3, R4, R5, error), pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5, error) {
 	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -256,7 +486,7 @@ func UseErr05[R1, R2, R3, R4, R5 any](fn func(context.Context) (R1, R2, R3, R4, 
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -270,12 +500,57 @@ func UseErr05[R1, R2, R3, R4, R5 any](fn func(context.Context) (R1, R2, R3, R4, 
 	}
 }
 
-func Use06[R1, R2, R3, R4, R5, R6 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6), name string, opts ...trace.SpanStartOption) func(context.Context) (R1, R2, R3, R4, R5, R6) {
-	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption05 add span when context contains Telemetry
+func UseOption05[R1, R2, R3, R4, R5 any](fn func(context.Context) (R1, R2, R3, R4, R5), sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5 = fn(cx)
+		} else {
+			r1, r2, r3, r4, r5 = fn(ctx)
+		}
+		return
+	}
+}
+
+// UseOptionErr05 add span when context contains Telemetry
+func UseOptionErr05[R1, R2, R3, R4, R5 any](fn func(context.Context) (R1, R2, R3, R4, R5, error), sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5, error) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, err = fn(cx)
+		} else {
+			r1, r2, r3, r4, r5, err = fn(ctx)
+		}
+		return
+	}
+}
+
+// Use06 add span when context not nil
+func Use06[R1, R2, R3, R4, R5, R6 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6), pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -287,12 +562,13 @@ func Use06[R1, R2, R3, R4, R5, R6 any](fn func(context.Context) (R1, R2, R3, R4,
 		return
 	}
 }
-func UseErr06[R1, R2, R3, R4, R5, R6 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, error), name string, opts ...trace.SpanStartOption) func(context.Context) (R1, R2, R3, R4, R5, R6, error) {
+
+// UseErr06 add span when context not nil
+func UseErr06[R1, R2, R3, R4, R5, R6 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, error), pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5, R6, error) {
 	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -300,7 +576,7 @@ func UseErr06[R1, R2, R3, R4, R5, R6 any](fn func(context.Context) (R1, R2, R3, 
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -314,12 +590,57 @@ func UseErr06[R1, R2, R3, R4, R5, R6 any](fn func(context.Context) (R1, R2, R3, 
 	}
 }
 
-func Use07[R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, R7), name string, opts ...trace.SpanStartOption) func(context.Context) (R1, R2, R3, R4, R5, R6, R7) {
-	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption06 add span when context contains Telemetry
+func UseOption06[R1, R2, R3, R4, R5, R6 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6), sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6 = fn(cx)
+		} else {
+			r1, r2, r3, r4, r5, r6 = fn(ctx)
+		}
+		return
+	}
+}
+
+// UseOptionErr06 add span when context contains Telemetry
+func UseOptionErr06[R1, R2, R3, R4, R5, R6 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, error), sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5, R6, error) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, err = fn(cx)
+		} else {
+			r1, r2, r3, r4, r5, r6, err = fn(ctx)
+		}
+		return
+	}
+}
+
+// Use07 add span when context not nil
+func Use07[R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, R7), pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -331,12 +652,13 @@ func Use07[R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context) (R1, R2, R3,
 		return
 	}
 }
-func UseErr07[R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, R7, error), name string, opts ...trace.SpanStartOption) func(context.Context) (R1, R2, R3, R4, R5, R6, R7, error) {
+
+// UseErr07 add span when context not nil
+func UseErr07[R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, R7, error), pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5, R6, R7, error) {
 	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -344,7 +666,7 @@ func UseErr07[R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context) (R1, R2, 
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -358,12 +680,57 @@ func UseErr07[R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context) (R1, R2, 
 	}
 }
 
-func Use08[R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8), name string, opts ...trace.SpanStartOption) func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8) {
-	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption07 add span when context contains Telemetry
+func UseOption07[R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, R7), sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7 = fn(cx)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7 = fn(ctx)
+		}
+		return
+	}
+}
+
+// UseOptionErr07 add span when context contains Telemetry
+func UseOptionErr07[R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, R7, error), sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5, R6, R7, error) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, err = fn(cx)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, err = fn(ctx)
+		}
+		return
+	}
+}
+
+// Use08 add span when context not nil
+func Use08[R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8), pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -375,12 +742,13 @@ func Use08[R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context) (R1, R2,
 		return
 	}
 }
-func UseErr08[R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8, error), name string, opts ...trace.SpanStartOption) func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+
+// UseErr08 add span when context not nil
+func UseErr08[R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8, error), pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
 	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -388,7 +756,7 @@ func UseErr08[R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context) (R1, 
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -402,12 +770,57 @@ func UseErr08[R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context) (R1, 
 	}
 }
 
-func Use09[R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8, R9), name string, opts ...trace.SpanStartOption) func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
-	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption08 add span when context contains Telemetry
+func UseOption08[R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8), sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(cx)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(ctx)
+		}
+		return
+	}
+}
+
+// UseOptionErr08 add span when context contains Telemetry
+func UseOptionErr08[R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8, error), sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(cx)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(ctx)
+		}
+		return
+	}
+}
+
+// Use09 add span when context not nil
+func Use09[R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8, R9), pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -419,12 +832,13 @@ func Use09[R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context) (R1,
 		return
 	}
 }
-func UseErr09[R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), name string, opts ...trace.SpanStartOption) func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+
+// UseErr09 add span when context not nil
+func UseErr09[R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), pp TelemetryProviderFn, sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
 	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, s, cx := SpanByContext(ctx, pp, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -432,7 +846,7 @@ func UseErr09[R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context) (
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -446,12 +860,59 @@ func UseErr09[R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context) (
 	}
 }
 
-func Use10[A1 any](fn func(context.Context, A1), name string, opts ...trace.SpanStartOption) func(context.Context, A1) {
-	return func(ctx context.Context, a1 A1) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption09 add span when context contains Telemetry
+func UseOption09[R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8, R9), sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(cx)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(ctx)
+		}
+		return
+	}
+}
+
+// UseOptionErr09 add span when context contains Telemetry
+func UseOptionErr09[R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), sp SpanProviderFn) func(context.Context) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+	return func(ctx context.Context) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
+		if t, s, cx := SpanFromContext(ctx, sp); s != nil {
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(cx)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(ctx)
+		}
+		return
+	}
+}
+
+// Use10 add span when context not nil
+func Use10[A1 any](fn func(context.Context, A1), pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) {
+	return func(ctx context.Context, a1 A1) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -462,12 +923,15 @@ func Use10[A1 any](fn func(context.Context, A1), name string, opts ...trace.Span
 		}
 	}
 }
-func UseErr10[A1 any](fn func(context.Context, A1) error, name string, opts ...trace.SpanStartOption) func(context.Context, A1) error {
+
+// UseErr10 add span when context not nil
+func UseErr10[A1 any](fn func(context.Context, A1) error, pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) error {
 	return func(ctx context.Context, a1 A1) (err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -475,7 +939,7 @@ func UseErr10[A1 any](fn func(context.Context, A1) error, name string, opts ...t
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -489,12 +953,62 @@ func UseErr10[A1 any](fn func(context.Context, A1) error, name string, opts ...t
 	}
 }
 
-func Use11[A1, R1 any](fn func(context.Context, A1) R1, name string, opts ...trace.SpanStartOption) func(context.Context, A1) R1 {
-	return func(ctx context.Context, a1 A1) (r1 R1) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption10 add span when context contains Telemetry
+func UseOption10[A1 any](fn func(context.Context, A1), sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) {
+	return func(ctx context.Context, a1 A1) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			fn(cx, a1)
+		} else {
+			fn(ctx, a1)
+		}
+	}
+}
+
+// UseOptionErr10 add span when context contains Telemetry
+func UseOptionErr10[A1 any](fn func(context.Context, A1) error, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) error {
+	return func(ctx context.Context, a1 A1) (err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			err = fn(cx, a1)
+		} else {
+			err = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// Use11 add span when context not nil
+func Use11[A1, R1 any](fn func(context.Context, A1) R1, pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) R1 {
+	return func(ctx context.Context, a1 A1) (r1 R1) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -506,12 +1020,15 @@ func Use11[A1, R1 any](fn func(context.Context, A1) R1, name string, opts ...tra
 		return
 	}
 }
-func UseErr11[A1, R1 any](fn func(context.Context, A1) (R1, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1) (R1, error) {
+
+// UseErr11 add span when context not nil
+func UseErr11[A1, R1 any](fn func(context.Context, A1) (R1, error), pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, error) {
 	return func(ctx context.Context, a1 A1) (r1 R1, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -519,7 +1036,7 @@ func UseErr11[A1, R1 any](fn func(context.Context, A1) (R1, error), name string,
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -533,12 +1050,63 @@ func UseErr11[A1, R1 any](fn func(context.Context, A1) (R1, error), name string,
 	}
 }
 
-func Use12[A1, R1, R2 any](fn func(context.Context, A1) (R1, R2), name string, opts ...trace.SpanStartOption) func(context.Context, A1) (R1, R2) {
-	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption11 add span when context have a Telemetry
+func UseOption11[A1, R1 any](fn func(context.Context, A1) R1, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) R1 {
+	return func(ctx context.Context, a1 A1) (r1 R1) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1 = fn(cx, a1)
+		} else {
+			r1 = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// UseOptionErr11 add span when context have a Telemetry
+func UseOptionErr11[A1, R1 any](fn func(context.Context, A1) (R1, error), sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, error) {
+	return func(ctx context.Context, a1 A1) (r1 R1, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, err = fn(cx, a1)
+		} else {
+			r1, err = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// Use12 add span when context not nil
+func Use12[A1, R1, R2 any](fn func(context.Context, A1) (R1, R2), pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -550,12 +1118,15 @@ func Use12[A1, R1, R2 any](fn func(context.Context, A1) (R1, R2), name string, o
 		return
 	}
 }
-func UseErr12[A1, R1, R2 any](fn func(context.Context, A1) (R1, R2, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1) (R1, R2, error) {
+
+// UseErr12 add span when context not nil
+func UseErr12[A1, R1, R2 any](fn func(context.Context, A1) (R1, R2, error), pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, error) {
 	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -563,7 +1134,7 @@ func UseErr12[A1, R1, R2 any](fn func(context.Context, A1) (R1, R2, error), name
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -577,12 +1148,63 @@ func UseErr12[A1, R1, R2 any](fn func(context.Context, A1) (R1, R2, error), name
 	}
 }
 
-func Use13[A1, R1, R2, R3 any](fn func(context.Context, A1) (R1, R2, R3), name string, opts ...trace.SpanStartOption) func(context.Context, A1) (R1, R2, R3) {
-	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption12 add span when context have a Telemetry
+func UseOption12[A1, R1, R2 any](fn func(context.Context, A1) (R1, R2), sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2 = fn(cx, a1)
+		} else {
+			r1, r2 = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// UseOptionErr12 add span when context have a Telemetry
+func UseOptionErr12[A1, R1, R2 any](fn func(context.Context, A1) (R1, R2, error), sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, error) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, err = fn(cx, a1)
+		} else {
+			r1, r2, err = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// Use13 add span when context not nil
+func Use13[A1, R1, R2, R3 any](fn func(context.Context, A1) (R1, R2, R3), pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -594,12 +1216,15 @@ func Use13[A1, R1, R2, R3 any](fn func(context.Context, A1) (R1, R2, R3), name s
 		return
 	}
 }
-func UseErr13[A1, R1, R2, R3 any](fn func(context.Context, A1) (R1, R2, R3, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1) (R1, R2, R3, error) {
+
+// UseErr13 add span when context not nil
+func UseErr13[A1, R1, R2, R3 any](fn func(context.Context, A1) (R1, R2, R3, error), pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, error) {
 	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -607,7 +1232,7 @@ func UseErr13[A1, R1, R2, R3 any](fn func(context.Context, A1) (R1, R2, R3, erro
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -621,12 +1246,63 @@ func UseErr13[A1, R1, R2, R3 any](fn func(context.Context, A1) (R1, R2, R3, erro
 	}
 }
 
-func Use14[A1, R1, R2, R3, R4 any](fn func(context.Context, A1) (R1, R2, R3, R4), name string, opts ...trace.SpanStartOption) func(context.Context, A1) (R1, R2, R3, R4) {
-	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption13 add span when context have a Telemetry
+func UseOption13[A1, R1, R2, R3 any](fn func(context.Context, A1) (R1, R2, R3), sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3 = fn(cx, a1)
+		} else {
+			r1, r2, r3 = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// UseOptionErr13 add span when context have a Telemetry
+func UseOptionErr13[A1, R1, R2, R3 any](fn func(context.Context, A1) (R1, R2, R3, error), sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, error) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, err = fn(cx, a1)
+		} else {
+			r1, r2, r3, err = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// Use14 add span when context not nil
+func Use14[A1, R1, R2, R3, R4 any](fn func(context.Context, A1) (R1, R2, R3, R4), pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -638,12 +1314,15 @@ func Use14[A1, R1, R2, R3, R4 any](fn func(context.Context, A1) (R1, R2, R3, R4)
 		return
 	}
 }
-func UseErr14[A1, R1, R2, R3, R4 any](fn func(context.Context, A1) (R1, R2, R3, R4, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1) (R1, R2, R3, R4, error) {
+
+// UseErr14 add span when context not nil
+func UseErr14[A1, R1, R2, R3, R4 any](fn func(context.Context, A1) (R1, R2, R3, R4, error), pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, error) {
 	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -651,7 +1330,7 @@ func UseErr14[A1, R1, R2, R3, R4 any](fn func(context.Context, A1) (R1, R2, R3, 
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -665,12 +1344,63 @@ func UseErr14[A1, R1, R2, R3, R4 any](fn func(context.Context, A1) (R1, R2, R3, 
 	}
 }
 
-func Use15[A1, R1, R2, R3, R4, R5 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5), name string, opts ...trace.SpanStartOption) func(context.Context, A1) (R1, R2, R3, R4, R5) {
-	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption14 add span when context have a Telemetry
+func UseOption14[A1, R1, R2, R3, R4 any](fn func(context.Context, A1) (R1, R2, R3, R4), sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4 = fn(cx, a1)
+		} else {
+			r1, r2, r3, r4 = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// UseOptionErr14 add span when context have a Telemetry
+func UseOptionErr14[A1, R1, R2, R3, R4 any](fn func(context.Context, A1) (R1, R2, R3, R4, error), sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, error) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, err = fn(cx, a1)
+		} else {
+			r1, r2, r3, r4, err = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// Use15 add span when context not nil
+func Use15[A1, R1, R2, R3, R4, R5 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5), pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -682,12 +1412,15 @@ func Use15[A1, R1, R2, R3, R4, R5 any](fn func(context.Context, A1) (R1, R2, R3,
 		return
 	}
 }
-func UseErr15[A1, R1, R2, R3, R4, R5 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1) (R1, R2, R3, R4, R5, error) {
+
+// UseErr15 add span when context not nil
+func UseErr15[A1, R1, R2, R3, R4, R5 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, error), pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5, error) {
 	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -695,7 +1428,7 @@ func UseErr15[A1, R1, R2, R3, R4, R5 any](fn func(context.Context, A1) (R1, R2, 
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -709,12 +1442,63 @@ func UseErr15[A1, R1, R2, R3, R4, R5 any](fn func(context.Context, A1) (R1, R2, 
 	}
 }
 
-func Use16[A1, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6), name string, opts ...trace.SpanStartOption) func(context.Context, A1) (R1, R2, R3, R4, R5, R6) {
-	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption15 add span when context have a Telemetry
+func UseOption15[A1, R1, R2, R3, R4, R5 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5), sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5 = fn(cx, a1)
+		} else {
+			r1, r2, r3, r4, r5 = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// UseOptionErr15 add span when context have a Telemetry
+func UseOptionErr15[A1, R1, R2, R3, R4, R5 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, error), sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5, error) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, err = fn(cx, a1)
+		} else {
+			r1, r2, r3, r4, r5, err = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// Use16 add span when context not nil
+func Use16[A1, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6), pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -726,12 +1510,15 @@ func Use16[A1, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1) (R1, R2,
 		return
 	}
 }
-func UseErr16[A1, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, error) {
+
+// UseErr16 add span when context not nil
+func UseErr16[A1, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, error), pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, error) {
 	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -739,7 +1526,7 @@ func UseErr16[A1, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1) (R1, 
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -753,12 +1540,63 @@ func UseErr16[A1, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1) (R1, 
 	}
 }
 
-func Use17[A1, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7), name string, opts ...trace.SpanStartOption) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7) {
-	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption16 add span when context have a Telemetry
+func UseOption16[A1, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6), sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6 = fn(cx, a1)
+		} else {
+			r1, r2, r3, r4, r5, r6 = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// UseOptionErr16 add span when context have a Telemetry
+func UseOptionErr16[A1, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, error), sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, error) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, err = fn(cx, a1)
+		} else {
+			r1, r2, r3, r4, r5, r6, err = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// Use17 add span when context not nil
+func Use17[A1, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7), pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -770,12 +1608,15 @@ func Use17[A1, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1) (R1,
 		return
 	}
 }
-func UseErr17[A1, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, error) {
+
+// UseErr17 add span when context not nil
+func UseErr17[A1, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, error), pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, error) {
 	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -783,7 +1624,7 @@ func UseErr17[A1, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1) (
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -797,12 +1638,63 @@ func UseErr17[A1, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1) (
 	}
 }
 
-func Use18[A1, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8), name string, opts ...trace.SpanStartOption) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8) {
-	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption17 add span when context have a Telemetry
+func UseOption17[A1, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7), sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7 = fn(cx, a1)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7 = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// UseOptionErr17 add span when context have a Telemetry
+func UseOptionErr17[A1, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, error), sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, error) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, err = fn(cx, a1)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, err = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// Use18 add span when context not nil
+func Use18[A1, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8), pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -814,12 +1706,15 @@ func Use18[A1, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1) 
 		return
 	}
 }
-func UseErr18[A1, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+
+// UseErr18 add span when context not nil
+func UseErr18[A1, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8, error), pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
 	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -827,7 +1722,7 @@ func UseErr18[A1, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -841,12 +1736,64 @@ func UseErr18[A1, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A
 	}
 }
 
-func Use19[A1, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8, R9), name string, opts ...trace.SpanStartOption) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
-	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption18 add span when context have a Telemetry
+func UseOption18[A1, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8), sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(cx, a1)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// UseOptionErr18 add span when context have a Telemetry
+func UseOptionErr18[A1, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8, error), sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(cx, a1)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// Use19 add span when context not nil
+func Use19[A1, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8, R9), pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -858,12 +1805,15 @@ func Use19[A1, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, 
 		return
 	}
 }
-func UseErr19[A1, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+
+// UseErr19 add span when context not nil
+func UseErr19[A1, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), pp TelemetryProviderFn, sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
 	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -871,7 +1821,7 @@ func UseErr19[A1, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Contex
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -885,12 +1835,63 @@ func UseErr19[A1, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Contex
 	}
 }
 
-func Use20[A1, A2 any](fn func(context.Context, A1, A2), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) {
-	return func(ctx context.Context, a1 A1, a2 A2) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption19 add span when context have a Telemetry
+func UseOption19[A1, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8, R9), sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(cx, a1)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// UseOptionErr19 add span when context have a Telemetry
+func UseOptionErr19[A1, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), sp func(A1) (string, []attribute.KeyValue)) func(context.Context, A1) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+	return func(ctx context.Context, a1 A1) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(cx, a1)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(ctx, a1)
+		}
+		return
+	}
+}
+
+// Use20 add span when context not nil
+func Use20[A1, A2 any](fn func(context.Context, A1, A2), pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) {
+	return func(ctx context.Context, a1 A1, a2 A2) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -901,13 +1902,15 @@ func Use20[A1, A2 any](fn func(context.Context, A1, A2), name string, opts ...tr
 		}
 	}
 }
-func UseErr20[A1, A2 any](fn func(context.Context, A1, A2) error, name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) error {
 
+// UseErr20 add span when context not nil
+func UseErr20[A1, A2 any](fn func(context.Context, A1, A2) error, pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) error {
 	return func(ctx context.Context, a1 A1, a2 A2) (err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -915,7 +1918,7 @@ func UseErr20[A1, A2 any](fn func(context.Context, A1, A2) error, name string, o
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -929,12 +1932,62 @@ func UseErr20[A1, A2 any](fn func(context.Context, A1, A2) error, name string, o
 	}
 }
 
-func Use21[A1, A2, R1 any](fn func(context.Context, A1, A2) R1, name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) R1 {
-	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption20 add span when context contains Telemetry
+func UseOption20[A1, A2 any](fn func(context.Context, A1, A2), sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) {
+	return func(ctx context.Context, a1 A1, a2 A2) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			fn(cx, a1, a2)
+		} else {
+			fn(ctx, a1, a2)
+		}
+	}
+}
+
+// UseOptionErr20 add span when context contains Telemetry
+func UseOptionErr20[A1, A2 any](fn func(context.Context, A1, A2) error, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) error {
+	return func(ctx context.Context, a1 A1, a2 A2) (err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			err = fn(cx, a1, a2)
+		} else {
+			err = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// Use21 add span when context not nil
+func Use21[A1, A2, R1 any](fn func(context.Context, A1, A2) R1, pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) R1 {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -946,12 +1999,15 @@ func Use21[A1, A2, R1 any](fn func(context.Context, A1, A2) R1, name string, opt
 		return
 	}
 }
-func UseErr21[A1, A2, R1 any](fn func(context.Context, A1, A2) (R1, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) (R1, error) {
+
+// UseErr21 add span when context not nil
+func UseErr21[A1, A2, R1 any](fn func(context.Context, A1, A2) (R1, error), pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, error) {
 	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -959,7 +2015,7 @@ func UseErr21[A1, A2, R1 any](fn func(context.Context, A1, A2) (R1, error), name
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -973,12 +2029,63 @@ func UseErr21[A1, A2, R1 any](fn func(context.Context, A1, A2) (R1, error), name
 	}
 }
 
-func Use22[A1, A2, R1, R2 any](fn func(context.Context, A1, A2) (R1, R2), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) (R1, R2) {
-	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption21 add span when context have a Telemetry
+func UseOption21[A1, A2, R1 any](fn func(context.Context, A1, A2) R1, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) R1 {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1 = fn(cx, a1, a2)
+		} else {
+			r1 = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// UseOptionErr21 add span when context have a Telemetry
+func UseOptionErr21[A1, A2, R1 any](fn func(context.Context, A1, A2) (R1, error), sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, error) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, err = fn(cx, a1, a2)
+		} else {
+			r1, err = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// Use22 add span when context not nil
+func Use22[A1, A2, R1, R2 any](fn func(context.Context, A1, A2) (R1, R2), pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -990,12 +2097,15 @@ func Use22[A1, A2, R1, R2 any](fn func(context.Context, A1, A2) (R1, R2), name s
 		return
 	}
 }
-func UseErr22[A1, A2, R1, R2 any](fn func(context.Context, A1, A2) (R1, R2, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) (R1, R2, error) {
+
+// UseErr22 add span when context not nil
+func UseErr22[A1, A2, R1, R2 any](fn func(context.Context, A1, A2) (R1, R2, error), pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, error) {
 	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1003,7 +2113,7 @@ func UseErr22[A1, A2, R1, R2 any](fn func(context.Context, A1, A2) (R1, R2, erro
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1017,12 +2127,63 @@ func UseErr22[A1, A2, R1, R2 any](fn func(context.Context, A1, A2) (R1, R2, erro
 	}
 }
 
-func Use23[A1, A2, R1, R2, R3 any](fn func(context.Context, A1, A2) (R1, R2, R3), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) (R1, R2, R3) {
-	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption22 add span when context have a Telemetry
+func UseOption22[A1, A2, R1, R2 any](fn func(context.Context, A1, A2) (R1, R2), sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2 = fn(cx, a1, a2)
+		} else {
+			r1, r2 = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// UseOptionErr22 add span when context have a Telemetry
+func UseOptionErr22[A1, A2, R1, R2 any](fn func(context.Context, A1, A2) (R1, R2, error), sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, error) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, err = fn(cx, a1, a2)
+		} else {
+			r1, r2, err = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// Use23 add span when context not nil
+func Use23[A1, A2, R1, R2, R3 any](fn func(context.Context, A1, A2) (R1, R2, R3), pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1034,12 +2195,15 @@ func Use23[A1, A2, R1, R2, R3 any](fn func(context.Context, A1, A2) (R1, R2, R3)
 		return
 	}
 }
-func UseErr23[A1, A2, R1, R2, R3 any](fn func(context.Context, A1, A2) (R1, R2, R3, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) (R1, R2, R3, error) {
+
+// UseErr23 add span when context not nil
+func UseErr23[A1, A2, R1, R2, R3 any](fn func(context.Context, A1, A2) (R1, R2, R3, error), pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, error) {
 	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1047,7 +2211,7 @@ func UseErr23[A1, A2, R1, R2, R3 any](fn func(context.Context, A1, A2) (R1, R2, 
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1061,12 +2225,63 @@ func UseErr23[A1, A2, R1, R2, R3 any](fn func(context.Context, A1, A2) (R1, R2, 
 	}
 }
 
-func Use24[A1, A2, R1, R2, R3, R4 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) (R1, R2, R3, R4) {
-	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption23 add span when context have a Telemetry
+func UseOption23[A1, A2, R1, R2, R3 any](fn func(context.Context, A1, A2) (R1, R2, R3), sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3 = fn(cx, a1, a2)
+		} else {
+			r1, r2, r3 = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// UseOptionErr23 add span when context have a Telemetry
+func UseOptionErr23[A1, A2, R1, R2, R3 any](fn func(context.Context, A1, A2) (R1, R2, R3, error), sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, error) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, err = fn(cx, a1, a2)
+		} else {
+			r1, r2, r3, err = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// Use24 add span when context not nil
+func Use24[A1, A2, R1, R2, R3, R4 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4), pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1078,12 +2293,15 @@ func Use24[A1, A2, R1, R2, R3, R4 any](fn func(context.Context, A1, A2) (R1, R2,
 		return
 	}
 }
-func UseErr24[A1, A2, R1, R2, R3, R4 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) (R1, R2, R3, R4, error) {
+
+// UseErr24 add span when context not nil
+func UseErr24[A1, A2, R1, R2, R3, R4 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, error), pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, error) {
 	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1091,7 +2309,7 @@ func UseErr24[A1, A2, R1, R2, R3, R4 any](fn func(context.Context, A1, A2) (R1, 
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1105,12 +2323,63 @@ func UseErr24[A1, A2, R1, R2, R3, R4 any](fn func(context.Context, A1, A2) (R1, 
 	}
 }
 
-func Use25[A1, A2, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) (R1, R2, R3, R4, R5) {
-	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption24 add span when context have a Telemetry
+func UseOption24[A1, A2, R1, R2, R3, R4 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4), sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4 = fn(cx, a1, a2)
+		} else {
+			r1, r2, r3, r4 = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// UseOptionErr24 add span when context have a Telemetry
+func UseOptionErr24[A1, A2, R1, R2, R3, R4 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, error), sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, error) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, err = fn(cx, a1, a2)
+		} else {
+			r1, r2, r3, r4, err = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// Use25 add span when context not nil
+func Use25[A1, A2, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5), pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1122,12 +2391,15 @@ func Use25[A1, A2, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2) (R1,
 		return
 	}
 }
-func UseErr25[A1, A2, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, error) {
+
+// UseErr25 add span when context not nil
+func UseErr25[A1, A2, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, error), pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, error) {
 	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1135,7 +2407,7 @@ func UseErr25[A1, A2, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2) (
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1149,12 +2421,63 @@ func UseErr25[A1, A2, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2) (
 	}
 }
 
-func Use26[A1, A2, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6) {
-	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption25 add span when context have a Telemetry
+func UseOption25[A1, A2, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5), sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5 = fn(cx, a1, a2)
+		} else {
+			r1, r2, r3, r4, r5 = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// UseOptionErr25 add span when context have a Telemetry
+func UseOptionErr25[A1, A2, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, error), sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, error) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, err = fn(cx, a1, a2)
+		} else {
+			r1, r2, r3, r4, r5, err = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// Use26 add span when context not nil
+func Use26[A1, A2, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6), pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1166,12 +2489,16 @@ func Use26[A1, A2, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2) 
 		return
 	}
 }
-func UseErr26[A1, A2, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, error) {
+
+// UseErr26 add span when context not nil
+func UseErr26[A1, A2, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, error), pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, error) {
+
 	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1179,7 +2506,7 @@ func UseErr26[A1, A2, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1193,12 +2520,63 @@ func UseErr26[A1, A2, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A
 	}
 }
 
-func Use27[A1, A2, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7) {
-	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption26 add span when context have a Telemetry
+func UseOption26[A1, A2, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6), sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6 = fn(cx, a1, a2)
+		} else {
+			r1, r2, r3, r4, r5, r6 = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// UseOptionErr26 add span when context have a Telemetry
+func UseOptionErr26[A1, A2, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, error), sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, error) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, err = fn(cx, a1, a2)
+		} else {
+			r1, r2, r3, r4, r5, r6, err = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// Use27 add span when context not nil
+func Use27[A1, A2, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7), pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1210,12 +2588,15 @@ func Use27[A1, A2, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, 
 		return
 	}
 }
-func UseErr27[A1, A2, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, error) {
+
+// UseErr27 add span when context not nil
+func UseErr27[A1, A2, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, error), pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, error) {
 	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1223,7 +2604,7 @@ func UseErr27[A1, A2, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1237,12 +2618,63 @@ func UseErr27[A1, A2, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A
 	}
 }
 
-func Use28[A1, A2, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8) {
-	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption27 add span when context have a Telemetry
+func UseOption27[A1, A2, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7), sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7 = fn(cx, a1, a2)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7 = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// UseOptionErr27 add span when context have a Telemetry
+func UseOptionErr27[A1, A2, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, error), sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, error) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, err = fn(cx, a1, a2)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, err = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// Use28 add span when context not nil
+func Use28[A1, A2, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8), pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1254,12 +2686,15 @@ func Use28[A1, A2, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, 
 		return
 	}
 }
-func UseErr28[A1, A2, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+
+// UseErr28 add span when context not nil
+func UseErr28[A1, A2, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8, error), pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
 	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1267,7 +2702,7 @@ func UseErr28[A1, A2, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Contex
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1281,12 +2716,64 @@ func UseErr28[A1, A2, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Contex
 	}
 }
 
-func Use29[A1, A2, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8, R9), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
-	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption28 add span when context have a Telemetry
+func UseOption28[A1, A2, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8), sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(cx, a1, a2)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// UseOptionErr28 add span when context have a Telemetry
+func UseOptionErr28[A1, A2, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8, error), sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(cx, a1, a2)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// Use29 add span when context not nil
+func Use29[A1, A2, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8, R9), pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1298,12 +2785,15 @@ func Use29[A1, A2, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Conte
 		return
 	}
 }
-func UseErr29[A1, A2, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+
+// UseErr29 add span when context not nil
+func UseErr29[A1, A2, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), pp TelemetryProviderFn, sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
 	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1311,7 +2801,7 @@ func UseErr29[A1, A2, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Co
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1325,12 +2815,63 @@ func UseErr29[A1, A2, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Co
 	}
 }
 
-func Use30[A1, A2, A3 any](fn func(context.Context, A1, A2, A3), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption29 add span when context have a Telemetry
+func UseOption29[A1, A2, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8, R9), sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(cx, a1, a2)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// UseOptionErr29 add span when context have a Telemetry
+func UseOptionErr29[A1, A2, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), sp func(A1, A2) (string, []attribute.KeyValue)) func(context.Context, A1, A2) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+	return func(ctx context.Context, a1 A1, a2 A2) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(cx, a1, a2)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(ctx, a1, a2)
+		}
+		return
+	}
+}
+
+// Use30 add span when context not nil
+func Use30[A1, A2, A3 any](fn func(context.Context, A1, A2, A3), pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1341,12 +2882,15 @@ func Use30[A1, A2, A3 any](fn func(context.Context, A1, A2, A3), name string, op
 		}
 	}
 }
-func UseErr30[A1, A2, A3 any](fn func(context.Context, A1, A2, A3) error, name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) error {
+
+// UseErr30 add span when context not nil
+func UseErr30[A1, A2, A3 any](fn func(context.Context, A1, A2, A3) error, pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) error {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1354,7 +2898,7 @@ func UseErr30[A1, A2, A3 any](fn func(context.Context, A1, A2, A3) error, name s
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1368,12 +2912,62 @@ func UseErr30[A1, A2, A3 any](fn func(context.Context, A1, A2, A3) error, name s
 	}
 }
 
-func Use31[A1, A2, A3, R1 any](fn func(context.Context, A1, A2, A3) R1, name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) R1 {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption30 add span when context contains Telemetry
+func UseOption30[A1, A2, A3 any](fn func(context.Context, A1, A2, A3), sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			fn(cx, a1, a2, a3)
+		} else {
+			fn(ctx, a1, a2, a3)
+		}
+	}
+}
+
+// UseOptionErr30 add span when context contains Telemetry
+func UseOptionErr30[A1, A2, A3 any](fn func(context.Context, A1, A2, A3) error, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) error {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			err = fn(cx, a1, a2, a3)
+		} else {
+			err = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// Use31 add span when context not nil
+func Use31[A1, A2, A3, R1 any](fn func(context.Context, A1, A2, A3) R1, pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) R1 {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1385,12 +2979,15 @@ func Use31[A1, A2, A3, R1 any](fn func(context.Context, A1, A2, A3) R1, name str
 		return
 	}
 }
-func UseErr31[A1, A2, A3, R1 any](fn func(context.Context, A1, A2, A3) (R1, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) (R1, error) {
+
+// UseErr31 add span when context not nil
+func UseErr31[A1, A2, A3, R1 any](fn func(context.Context, A1, A2, A3) (R1, error), pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1398,7 +2995,7 @@ func UseErr31[A1, A2, A3, R1 any](fn func(context.Context, A1, A2, A3) (R1, erro
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1412,12 +3009,63 @@ func UseErr31[A1, A2, A3, R1 any](fn func(context.Context, A1, A2, A3) (R1, erro
 	}
 }
 
-func Use32[A1, A2, A3, R1, R2 any](fn func(context.Context, A1, A2, A3) (R1, R2), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) (R1, R2) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption31 add span when context have a Telemetry
+func UseOption31[A1, A2, A3, R1 any](fn func(context.Context, A1, A2, A3) R1, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) R1 {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1 = fn(cx, a1, a2, a3)
+		} else {
+			r1 = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// UseOptionErr31 add span when context have a Telemetry
+func UseOptionErr31[A1, A2, A3, R1 any](fn func(context.Context, A1, A2, A3) (R1, error), sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, err = fn(cx, a1, a2, a3)
+		} else {
+			r1, err = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// Use32 add span when context not nil
+func Use32[A1, A2, A3, R1, R2 any](fn func(context.Context, A1, A2, A3) (R1, R2), pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1429,12 +3077,15 @@ func Use32[A1, A2, A3, R1, R2 any](fn func(context.Context, A1, A2, A3) (R1, R2)
 		return
 	}
 }
-func UseErr32[A1, A2, A3, R1, R2 any](fn func(context.Context, A1, A2, A3) (R1, R2, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) (R1, R2, error) {
+
+// UseErr32 add span when context not nil
+func UseErr32[A1, A2, A3, R1, R2 any](fn func(context.Context, A1, A2, A3) (R1, R2, error), pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1442,7 +3093,7 @@ func UseErr32[A1, A2, A3, R1, R2 any](fn func(context.Context, A1, A2, A3) (R1, 
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1456,12 +3107,63 @@ func UseErr32[A1, A2, A3, R1, R2 any](fn func(context.Context, A1, A2, A3) (R1, 
 	}
 }
 
-func Use33[A1, A2, A3, R1, R2, R3 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) (R1, R2, R3) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption32 add span when context have a Telemetry
+func UseOption32[A1, A2, A3, R1, R2 any](fn func(context.Context, A1, A2, A3) (R1, R2), sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2 = fn(cx, a1, a2, a3)
+		} else {
+			r1, r2 = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// UseOptionErr32 add span when context have a Telemetry
+func UseOptionErr32[A1, A2, A3, R1, R2 any](fn func(context.Context, A1, A2, A3) (R1, R2, error), sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, err = fn(cx, a1, a2, a3)
+		} else {
+			r1, r2, err = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// Use33 add span when context not nil
+func Use33[A1, A2, A3, R1, R2, R3 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3), pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1473,12 +3175,15 @@ func Use33[A1, A2, A3, R1, R2, R3 any](fn func(context.Context, A1, A2, A3) (R1,
 		return
 	}
 }
-func UseErr33[A1, A2, A3, R1, R2, R3 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) (R1, R2, R3, error) {
+
+// UseErr33 add span when context not nil
+func UseErr33[A1, A2, A3, R1, R2, R3 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, error), pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1486,7 +3191,7 @@ func UseErr33[A1, A2, A3, R1, R2, R3 any](fn func(context.Context, A1, A2, A3) (
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1500,12 +3205,63 @@ func UseErr33[A1, A2, A3, R1, R2, R3 any](fn func(context.Context, A1, A2, A3) (
 	}
 }
 
-func Use34[A1, A2, A3, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) (R1, R2, R3, R4) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption33 add span when context have a Telemetry
+func UseOption33[A1, A2, A3, R1, R2, R3 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3), sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3 = fn(cx, a1, a2, a3)
+		} else {
+			r1, r2, r3 = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// UseOptionErr33 add span when context have a Telemetry
+func UseOptionErr33[A1, A2, A3, R1, R2, R3 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, error), sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, err = fn(cx, a1, a2, a3)
+		} else {
+			r1, r2, r3, err = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// Use34 add span when context not nil
+func Use34[A1, A2, A3, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4), pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1517,12 +3273,15 @@ func Use34[A1, A2, A3, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3) 
 		return
 	}
 }
-func UseErr34[A1, A2, A3, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, error) {
+
+// UseErr34 add span when context not nil
+func UseErr34[A1, A2, A3, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, error), pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1530,7 +3289,7 @@ func UseErr34[A1, A2, A3, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1544,12 +3303,63 @@ func UseErr34[A1, A2, A3, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A
 	}
 }
 
-func Use35[A1, A2, A3, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption34 add span when context have a Telemetry
+func UseOption34[A1, A2, A3, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4), sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4 = fn(cx, a1, a2, a3)
+		} else {
+			r1, r2, r3, r4 = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// UseOptionErr34 add span when context have a Telemetry
+func UseOptionErr34[A1, A2, A3, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, error), sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, err = fn(cx, a1, a2, a3)
+		} else {
+			r1, r2, r3, r4, err = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// Use35 add span when context not nil
+func Use35[A1, A2, A3, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5), pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1561,12 +3371,15 @@ func Use35[A1, A2, A3, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, 
 		return
 	}
 }
-func UseErr35[A1, A2, A3, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, error) {
+
+// UseErr35 add span when context not nil
+func UseErr35[A1, A2, A3, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, error), pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1574,7 +3387,7 @@ func UseErr35[A1, A2, A3, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1588,12 +3401,63 @@ func UseErr35[A1, A2, A3, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A
 	}
 }
 
-func Use36[A1, A2, A3, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption35 add span when context have a Telemetry
+func UseOption35[A1, A2, A3, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5), sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5 = fn(cx, a1, a2, a3)
+		} else {
+			r1, r2, r3, r4, r5 = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// UseOptionErr35 add span when context have a Telemetry
+func UseOptionErr35[A1, A2, A3, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, error), sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, err = fn(cx, a1, a2, a3)
+		} else {
+			r1, r2, r3, r4, r5, err = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// Use36 add span when context not nil
+func Use36[A1, A2, A3, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6), pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1605,12 +3469,15 @@ func Use36[A1, A2, A3, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, 
 		return
 	}
 }
-func UseErr36[A1, A2, A3, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, error) {
+
+// UseErr36 add span when context not nil
+func UseErr36[A1, A2, A3, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, error), pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1618,7 +3485,7 @@ func UseErr36[A1, A2, A3, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1632,12 +3499,63 @@ func UseErr36[A1, A2, A3, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A
 	}
 }
 
-func Use37[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption36 add span when context have a Telemetry
+func UseOption36[A1, A2, A3, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6), sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6 = fn(cx, a1, a2, a3)
+		} else {
+			r1, r2, r3, r4, r5, r6 = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// UseOptionErr36 add span when context have a Telemetry
+func UseOptionErr36[A1, A2, A3, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, error), sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, err = fn(cx, a1, a2, a3)
+		} else {
+			r1, r2, r3, r4, r5, r6, err = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// Use37 add span when context not nil
+func Use37[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7), pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1649,12 +3567,15 @@ func Use37[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, 
 		return
 	}
 }
-func UseErr37[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, error) {
+
+// UseErr37 add span when context not nil
+func UseErr37[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, error), pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1662,7 +3583,7 @@ func UseErr37[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Contex
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1676,12 +3597,63 @@ func UseErr37[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Contex
 	}
 }
 
-func Use38[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption37 add span when context have a Telemetry
+func UseOption37[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7), sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7 = fn(cx, a1, a2, a3)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7 = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// UseOptionErr37 add span when context have a Telemetry
+func UseOptionErr37[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, error), sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, err = fn(cx, a1, a2, a3)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, err = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// Use38 add span when context not nil
+func Use38[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8), pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1693,12 +3665,15 @@ func Use38[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Conte
 		return
 	}
 }
-func UseErr38[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+
+// UseErr38 add span when context not nil
+func UseErr38[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8, error), pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1706,7 +3681,7 @@ func UseErr38[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Co
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1720,12 +3695,63 @@ func UseErr38[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Co
 	}
 }
 
-func Use39[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8, R9), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption38 add span when context have a Telemetry
+func UseOption38[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8), sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(cx, a1, a2, a3)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// UseOptionErr38 add span when context have a Telemetry
+func UseOptionErr38[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8, error), sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(cx, a1, a2, a3)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// Use39 add span when context not nil
+func Use39[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8, R9), pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1737,12 +3763,15 @@ func Use39[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.C
 		return
 	}
 }
-func UseErr39[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+
+// UseErr39 add span when context not nil
+func UseErr39[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), pp TelemetryProviderFn, sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1750,7 +3779,7 @@ func UseErr39[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(contex
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1764,12 +3793,63 @@ func UseErr39[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(contex
 	}
 }
 
-func Use40[A1, A2, A3, A4 any](fn func(context.Context, A1, A2, A3, A4), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption39 add span when context have a Telemetry
+func UseOption39[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8, R9), sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(cx, a1, a2, a3)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// UseOptionErr39 add span when context have a Telemetry
+func UseOptionErr39[A1, A2, A3, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), sp func(A1, A2, A3) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(cx, a1, a2, a3)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(ctx, a1, a2, a3)
+		}
+		return
+	}
+}
+
+// Use40 add span when context not nil
+func Use40[A1, A2, A3, A4 any](fn func(context.Context, A1, A2, A3, A4), pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1780,12 +3860,15 @@ func Use40[A1, A2, A3, A4 any](fn func(context.Context, A1, A2, A3, A4), name st
 		}
 	}
 }
-func UseErr40[A1, A2, A3, A4 any](fn func(context.Context, A1, A2, A3, A4) error, name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) error {
+
+// UseErr40 add span when context not nil
+func UseErr40[A1, A2, A3, A4 any](fn func(context.Context, A1, A2, A3, A4) error, pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) error {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1793,7 +3876,7 @@ func UseErr40[A1, A2, A3, A4 any](fn func(context.Context, A1, A2, A3, A4) error
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1807,12 +3890,62 @@ func UseErr40[A1, A2, A3, A4 any](fn func(context.Context, A1, A2, A3, A4) error
 	}
 }
 
-func Use41[A1, A2, A3, A4, R1 any](fn func(context.Context, A1, A2, A3, A4) R1, name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) R1 {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption40 add span when context contains Telemetry
+func UseOption40[A1, A2, A3, A4 any](fn func(context.Context, A1, A2, A3, A4), sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			fn(cx, a1, a2, a3, a4)
+		} else {
+			fn(ctx, a1, a2, a3, a4)
+		}
+	}
+}
+
+// UseOptionErr40 add span when context contains Telemetry
+func UseOptionErr40[A1, A2, A3, A4 any](fn func(context.Context, A1, A2, A3, A4) error, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) error {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			err = fn(cx, a1, a2, a3, a4)
+		} else {
+			err = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// Use41 add span when context not nil
+func Use41[A1, A2, A3, A4, R1 any](fn func(context.Context, A1, A2, A3, A4) R1, pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) R1 {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1824,12 +3957,15 @@ func Use41[A1, A2, A3, A4, R1 any](fn func(context.Context, A1, A2, A3, A4) R1, 
 		return
 	}
 }
-func UseErr41[A1, A2, A3, A4, R1 any](fn func(context.Context, A1, A2, A3, A4) (R1, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) (R1, error) {
+
+// UseErr41 add span when context not nil
+func UseErr41[A1, A2, A3, A4, R1 any](fn func(context.Context, A1, A2, A3, A4) (R1, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1837,7 +3973,7 @@ func UseErr41[A1, A2, A3, A4, R1 any](fn func(context.Context, A1, A2, A3, A4) (
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1851,12 +3987,63 @@ func UseErr41[A1, A2, A3, A4, R1 any](fn func(context.Context, A1, A2, A3, A4) (
 	}
 }
 
-func Use42[A1, A2, A3, A4, R1, R2 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) (R1, R2) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption41 add span when context have a Telemetry
+func UseOption41[A1, A2, A3, A4, R1 any](fn func(context.Context, A1, A2, A3, A4) R1, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) R1 {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1 = fn(cx, a1, a2, a3, a4)
+		} else {
+			r1 = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// UseOptionErr41 add span when context have a Telemetry
+func UseOptionErr41[A1, A2, A3, A4, R1 any](fn func(context.Context, A1, A2, A3, A4) (R1, error), sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, err = fn(cx, a1, a2, a3, a4)
+		} else {
+			r1, err = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// Use42 add span when context not nil
+func Use42[A1, A2, A3, A4, R1, R2 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2), pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1868,12 +4055,15 @@ func Use42[A1, A2, A3, A4, R1, R2 any](fn func(context.Context, A1, A2, A3, A4) 
 		return
 	}
 }
-func UseErr42[A1, A2, A3, A4, R1, R2 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) (R1, R2, error) {
+
+// UseErr42 add span when context not nil
+func UseErr42[A1, A2, A3, A4, R1, R2 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1881,7 +4071,7 @@ func UseErr42[A1, A2, A3, A4, R1, R2 any](fn func(context.Context, A1, A2, A3, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1895,12 +4085,63 @@ func UseErr42[A1, A2, A3, A4, R1, R2 any](fn func(context.Context, A1, A2, A3, A
 	}
 }
 
-func Use43[A1, A2, A3, A4, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) (R1, R2, R3) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption42 add span when context have a Telemetry
+func UseOption42[A1, A2, A3, A4, R1, R2 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2), sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2 = fn(cx, a1, a2, a3, a4)
+		} else {
+			r1, r2 = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// UseOptionErr42 add span when context have a Telemetry
+func UseOptionErr42[A1, A2, A3, A4, R1, R2 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, error), sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, err = fn(cx, a1, a2, a3, a4)
+		} else {
+			r1, r2, err = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// Use43 add span when context not nil
+func Use43[A1, A2, A3, A4, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3), pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1912,12 +4153,15 @@ func Use43[A1, A2, A3, A4, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, 
 		return
 	}
 }
-func UseErr43[A1, A2, A3, A4, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, error) {
+
+// UseErr43 add span when context not nil
+func UseErr43[A1, A2, A3, A4, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1925,7 +4169,7 @@ func UseErr43[A1, A2, A3, A4, R1, R2, R3 any](fn func(context.Context, A1, A2, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1939,12 +4183,63 @@ func UseErr43[A1, A2, A3, A4, R1, R2, R3 any](fn func(context.Context, A1, A2, A
 	}
 }
 
-func Use44[A1, A2, A3, A4, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption43 add span when context have a Telemetry
+func UseOption43[A1, A2, A3, A4, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3), sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3 = fn(cx, a1, a2, a3, a4)
+		} else {
+			r1, r2, r3 = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// UseOptionErr43 add span when context have a Telemetry
+func UseOptionErr43[A1, A2, A3, A4, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, error), sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, err = fn(cx, a1, a2, a3, a4)
+		} else {
+			r1, r2, r3, err = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// Use44 add span when context not nil
+func Use44[A1, A2, A3, A4, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4), pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -1956,12 +4251,15 @@ func Use44[A1, A2, A3, A4, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, 
 		return
 	}
 }
-func UseErr44[A1, A2, A3, A4, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, error) {
+
+// UseErr44 add span when context not nil
+func UseErr44[A1, A2, A3, A4, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -1969,7 +4267,7 @@ func UseErr44[A1, A2, A3, A4, R1, R2, R3, R4 any](fn func(context.Context, A1, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -1983,12 +4281,64 @@ func UseErr44[A1, A2, A3, A4, R1, R2, R3, R4 any](fn func(context.Context, A1, A
 	}
 }
 
-func Use45[A1, A2, A3, A4, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption44 add span when context have a Telemetry
+func UseOption44[A1, A2, A3, A4, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4), sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4 = fn(cx, a1, a2, a3, a4)
+		} else {
+			r1, r2, r3, r4 = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// UseOptionErr44 add span when context have a Telemetry
+func UseOptionErr44[A1, A2, A3, A4, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, error), sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, err = fn(cx, a1, a2, a3, a4)
+		} else {
+			r1, r2, r3, r4, err = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// Use45 add span when context not nil
+func Use45[A1, A2, A3, A4, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5), pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5) {
+
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2000,12 +4350,15 @@ func Use45[A1, A2, A3, A4, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, 
 		return
 	}
 }
-func UseErr45[A1, A2, A3, A4, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, error) {
+
+// UseErr45 add span when context not nil
+func UseErr45[A1, A2, A3, A4, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2013,7 +4366,7 @@ func UseErr45[A1, A2, A3, A4, R1, R2, R3, R4, R5 any](fn func(context.Context, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2027,12 +4380,63 @@ func UseErr45[A1, A2, A3, A4, R1, R2, R3, R4, R5 any](fn func(context.Context, A
 	}
 }
 
-func Use46[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption45 add span when context have a Telemetry
+func UseOption45[A1, A2, A3, A4, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5), sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5 = fn(cx, a1, a2, a3, a4)
+		} else {
+			r1, r2, r3, r4, r5 = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// UseOptionErr45 add span when context have a Telemetry
+func UseOptionErr45[A1, A2, A3, A4, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, error), sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, err = fn(cx, a1, a2, a3, a4)
+		} else {
+			r1, r2, r3, r4, r5, err = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// Use46 add span when context not nil
+func Use46[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6), pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2044,12 +4448,15 @@ func Use46[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, 
 		return
 	}
 }
-func UseErr46[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, error) {
+
+// UseErr46 add span when context not nil
+func UseErr46[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2057,7 +4464,7 @@ func UseErr46[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6 any](fn func(context.Contex
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2071,12 +4478,63 @@ func UseErr46[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6 any](fn func(context.Contex
 	}
 }
 
-func Use47[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption46 add span when context have a Telemetry
+func UseOption46[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6), sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6 = fn(cx, a1, a2, a3, a4)
+		} else {
+			r1, r2, r3, r4, r5, r6 = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// UseOptionErr46 add span when context have a Telemetry
+func UseOptionErr46[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, error), sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, err = fn(cx, a1, a2, a3, a4)
+		} else {
+			r1, r2, r3, r4, r5, r6, err = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// Use47 add span when context not nil
+func Use47[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7), pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2088,12 +4546,15 @@ func Use47[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Conte
 		return
 	}
 }
-func UseErr47[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, error) {
+
+// UseErr47 add span when context not nil
+func UseErr47[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2101,7 +4562,7 @@ func UseErr47[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Co
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2115,12 +4576,63 @@ func UseErr47[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Co
 	}
 }
 
-func Use48[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption47 add span when context have a Telemetry
+func UseOption47[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7), sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7 = fn(cx, a1, a2, a3, a4)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7 = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// UseOptionErr47 add span when context have a Telemetry
+func UseOptionErr47[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, error), sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, err = fn(cx, a1, a2, a3, a4)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, err = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// Use48 add span when context not nil
+func Use48[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8), pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2132,12 +4644,15 @@ func Use48[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.C
 		return
 	}
 }
-func UseErr48[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+
+// UseErr48 add span when context not nil
+func UseErr48[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2145,7 +4660,7 @@ func UseErr48[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(contex
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2159,12 +4674,63 @@ func UseErr48[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(contex
 	}
 }
 
-func Use49[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8, R9), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption48 add span when context have a Telemetry
+func UseOption48[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8), sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(cx, a1, a2, a3, a4)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// UseOptionErr48 add span when context have a Telemetry
+func UseOptionErr48[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8, error), sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(cx, a1, a2, a3, a4)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// Use49 add span when context not nil
+func Use49[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8, R9), pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2176,12 +4742,15 @@ func Use49[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(conte
 		return
 	}
 }
-func UseErr49[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+
+// UseErr49 add span when context not nil
+func UseErr49[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2189,7 +4758,7 @@ func UseErr49[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(co
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2203,12 +4772,63 @@ func UseErr49[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(co
 	}
 }
 
-func Use50[A1, A2, A3, A4, A5 any](fn func(context.Context, A1, A2, A3, A4, A5), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption49 add span when context have a Telemetry
+func UseOption49[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8, R9), sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(cx, a1, a2, a3, a4)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// UseOptionErr49 add span when context have a Telemetry
+func UseOptionErr49[A1, A2, A3, A4, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), sp func(A1, A2, A3, A4) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(cx, a1, a2, a3, a4)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(ctx, a1, a2, a3, a4)
+		}
+		return
+	}
+}
+
+// Use50 add span when context not nil
+func Use50[A1, A2, A3, A4, A5 any](fn func(context.Context, A1, A2, A3, A4, A5), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2219,12 +4839,15 @@ func Use50[A1, A2, A3, A4, A5 any](fn func(context.Context, A1, A2, A3, A4, A5),
 		}
 	}
 }
-func UseErr50[A1, A2, A3, A4, A5 any](fn func(context.Context, A1, A2, A3, A4, A5) error, name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) error {
+
+// UseErr50 add span when context not nil
+func UseErr50[A1, A2, A3, A4, A5 any](fn func(context.Context, A1, A2, A3, A4, A5) error, pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) error {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2232,7 +4855,7 @@ func UseErr50[A1, A2, A3, A4, A5 any](fn func(context.Context, A1, A2, A3, A4, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2246,12 +4869,62 @@ func UseErr50[A1, A2, A3, A4, A5 any](fn func(context.Context, A1, A2, A3, A4, A
 	}
 }
 
-func Use51[A1, A2, A3, A4, A5, R1 any](fn func(context.Context, A1, A2, A3, A4, A5) R1, name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) R1 {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption50 add span when context contains Telemetry
+func UseOption50[A1, A2, A3, A4, A5 any](fn func(context.Context, A1, A2, A3, A4, A5), sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			fn(ctx, a1, a2, a3, a4, a5)
+		}
+	}
+}
+
+// UseOptionErr50 add span when context contains Telemetry
+func UseOptionErr50[A1, A2, A3, A4, A5 any](fn func(context.Context, A1, A2, A3, A4, A5) error, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) error {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			err = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			err = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// Use51 add span when context not nil
+func Use51[A1, A2, A3, A4, A5, R1 any](fn func(context.Context, A1, A2, A3, A4, A5) R1, pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) R1 {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2263,12 +4936,15 @@ func Use51[A1, A2, A3, A4, A5, R1 any](fn func(context.Context, A1, A2, A3, A4, 
 		return
 	}
 }
-func UseErr51[A1, A2, A3, A4, A5, R1 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) (R1, error) {
+
+// UseErr51 add span when context not nil
+func UseErr51[A1, A2, A3, A4, A5, R1 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2276,7 +4952,7 @@ func UseErr51[A1, A2, A3, A4, A5, R1 any](fn func(context.Context, A1, A2, A3, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2290,12 +4966,63 @@ func UseErr51[A1, A2, A3, A4, A5, R1 any](fn func(context.Context, A1, A2, A3, A
 	}
 }
 
-func Use52[A1, A2, A3, A4, A5, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) (R1, R2) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption51 add span when context have a Telemetry
+func UseOption51[A1, A2, A3, A4, A5, R1 any](fn func(context.Context, A1, A2, A3, A4, A5) R1, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) R1 {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1 = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			r1 = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// UseOptionErr51 add span when context have a Telemetry
+func UseOptionErr51[A1, A2, A3, A4, A5, R1 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, error), sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, err = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			r1, err = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// Use52 add span when context not nil
+func Use52[A1, A2, A3, A4, A5, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2307,12 +5034,16 @@ func Use52[A1, A2, A3, A4, A5, R1, R2 any](fn func(context.Context, A1, A2, A3, 
 		return
 	}
 }
-func UseErr52[A1, A2, A3, A4, A5, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, error) {
+
+// UseErr52 add span when context not nil
+func UseErr52[A1, A2, A3, A4, A5, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, error) {
+
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2320,7 +5051,7 @@ func UseErr52[A1, A2, A3, A4, A5, R1, R2 any](fn func(context.Context, A1, A2, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2334,12 +5065,63 @@ func UseErr52[A1, A2, A3, A4, A5, R1, R2 any](fn func(context.Context, A1, A2, A
 	}
 }
 
-func Use53[A1, A2, A3, A4, A5, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption52 add span when context have a Telemetry
+func UseOption52[A1, A2, A3, A4, A5, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2), sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2 = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			r1, r2 = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// UseOptionErr52 add span when context have a Telemetry
+func UseOptionErr52[A1, A2, A3, A4, A5, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, error), sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, err = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			r1, r2, err = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// Use53 add span when context not nil
+func Use53[A1, A2, A3, A4, A5, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2351,12 +5133,15 @@ func Use53[A1, A2, A3, A4, A5, R1, R2, R3 any](fn func(context.Context, A1, A2, 
 		return
 	}
 }
-func UseErr53[A1, A2, A3, A4, A5, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, error) {
+
+// UseErr53 add span when context not nil
+func UseErr53[A1, A2, A3, A4, A5, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2364,7 +5149,7 @@ func UseErr53[A1, A2, A3, A4, A5, R1, R2, R3 any](fn func(context.Context, A1, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2378,12 +5163,63 @@ func UseErr53[A1, A2, A3, A4, A5, R1, R2, R3 any](fn func(context.Context, A1, A
 	}
 }
 
-func Use54[A1, A2, A3, A4, A5, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption53 add span when context have a Telemetry
+func UseOption53[A1, A2, A3, A4, A5, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3), sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3 = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			r1, r2, r3 = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// UseOptionErr53 add span when context have a Telemetry
+func UseOptionErr53[A1, A2, A3, A4, A5, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, error), sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, err = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			r1, r2, r3, err = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// Use54 add span when context not nil
+func Use54[A1, A2, A3, A4, A5, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2395,12 +5231,15 @@ func Use54[A1, A2, A3, A4, A5, R1, R2, R3, R4 any](fn func(context.Context, A1, 
 		return
 	}
 }
-func UseErr54[A1, A2, A3, A4, A5, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, error) {
+
+// UseErr54 add span when context not nil
+func UseErr54[A1, A2, A3, A4, A5, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2408,7 +5247,7 @@ func UseErr54[A1, A2, A3, A4, A5, R1, R2, R3, R4 any](fn func(context.Context, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2422,12 +5261,64 @@ func UseErr54[A1, A2, A3, A4, A5, R1, R2, R3, R4 any](fn func(context.Context, A
 	}
 }
 
-func Use55[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption54 add span when context have a Telemetry
+func UseOption54[A1, A2, A3, A4, A5, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4), sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4 = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			r1, r2, r3, r4 = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// UseOptionErr54 add span when context have a Telemetry
+func UseOptionErr54[A1, A2, A3, A4, A5, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, error), sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, error) {
+
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, err = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			r1, r2, r3, r4, err = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// Use55 add span when context not nil
+func Use55[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2439,12 +5330,15 @@ func Use55[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5 any](fn func(context.Context, 
 		return
 	}
 }
-func UseErr55[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, error) {
+
+// UseErr55 add span when context not nil
+func UseErr55[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2452,7 +5346,7 @@ func UseErr55[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5 any](fn func(context.Contex
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2466,12 +5360,63 @@ func UseErr55[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5 any](fn func(context.Contex
 	}
 }
 
-func Use56[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption55 add span when context have a Telemetry
+func UseOption55[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5), sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5 = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			r1, r2, r3, r4, r5 = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// UseOptionErr55 add span when context have a Telemetry
+func UseOptionErr55[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, error), sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, err = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			r1, r2, r3, r4, r5, err = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// Use56 add span when context not nil
+func Use56[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2483,12 +5428,15 @@ func Use56[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6 any](fn func(context.Conte
 		return
 	}
 }
-func UseErr56[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, error) {
+
+// UseErr56 add span when context not nil
+func UseErr56[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2496,7 +5444,7 @@ func UseErr56[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6 any](fn func(context.Co
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2510,12 +5458,63 @@ func UseErr56[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6 any](fn func(context.Co
 	}
 }
 
-func Use57[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption56 add span when context have a Telemetry
+func UseOption56[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6), sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6 = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			r1, r2, r3, r4, r5, r6 = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// UseOptionErr56 add span when context have a Telemetry
+func UseOptionErr56[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, error), sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, err = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			r1, r2, r3, r4, r5, r6, err = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// Use57 add span when context not nil
+func Use57[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2527,12 +5526,15 @@ func Use57[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.C
 		return
 	}
 }
-func UseErr57[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, error) {
+
+// UseErr57 add span when context not nil
+func UseErr57[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2540,7 +5542,7 @@ func UseErr57[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7 any](fn func(contex
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2554,12 +5556,63 @@ func UseErr57[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7 any](fn func(contex
 	}
 }
 
-func Use58[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption57 add span when context have a Telemetry
+func UseOption57[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7), sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7 = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7 = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// UseOptionErr57 add span when context have a Telemetry
+func UseOptionErr57[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, error), sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, err = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, err = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// Use58 add span when context not nil
+func Use58[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2571,12 +5624,15 @@ func Use58[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(conte
 		return
 	}
 }
-func UseErr58[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+
+// UseErr58 add span when context not nil
+func UseErr58[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2584,7 +5640,7 @@ func UseErr58[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(co
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2598,12 +5654,63 @@ func UseErr58[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(co
 	}
 }
 
-func Use59[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8, R9), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption58 add span when context have a Telemetry
+func UseOption58[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8), sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// UseOptionErr58 add span when context have a Telemetry
+func UseOptionErr58[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8, error), sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// Use59 add span when context not nil
+func Use59[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8, R9), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2615,12 +5722,15 @@ func Use59[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(c
 		return
 	}
 }
-func UseErr59[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+
+// UseErr59 add span when context not nil
+func UseErr59[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2628,7 +5738,7 @@ func UseErr59[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn fun
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2642,12 +5752,63 @@ func UseErr59[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn fun
 	}
 }
 
-func Use60[A1, A2, A3, A4, A5, A6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption59 add span when context have a Telemetry
+func UseOption59[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8, R9), sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// UseOptionErr59 add span when context have a Telemetry
+func UseOptionErr59[A1, A2, A3, A4, A5, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), sp func(A1, A2, A3, A4, A5) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(cx, a1, a2, a3, a4, a5)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(ctx, a1, a2, a3, a4, a5)
+		}
+		return
+	}
+}
+
+// Use60 add span when context not nil
+func Use60[A1, A2, A3, A4, A5, A6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2658,12 +5819,15 @@ func Use60[A1, A2, A3, A4, A5, A6 any](fn func(context.Context, A1, A2, A3, A4, 
 		}
 	}
 }
-func UseErr60[A1, A2, A3, A4, A5, A6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) error, name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) error {
+
+// UseErr60 add span when context not nil
+func UseErr60[A1, A2, A3, A4, A5, A6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) error, pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) error {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2671,7 +5835,7 @@ func UseErr60[A1, A2, A3, A4, A5, A6 any](fn func(context.Context, A1, A2, A3, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2685,12 +5849,62 @@ func UseErr60[A1, A2, A3, A4, A5, A6 any](fn func(context.Context, A1, A2, A3, A
 	}
 }
 
-func Use61[A1, A2, A3, A4, A5, A6, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) R1, name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) R1 {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption60 add span when context contains Telemetry
+func UseOption60[A1, A2, A3, A4, A5, A6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6), sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+	}
+}
+
+// UseOptionErr60 add span when context contains Telemetry
+func UseOptionErr60[A1, A2, A3, A4, A5, A6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) error, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) error {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			err = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			err = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// Use61 add span when context not nil
+func Use61[A1, A2, A3, A4, A5, A6, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) R1, pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) R1 {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2702,12 +5916,15 @@ func Use61[A1, A2, A3, A4, A5, A6, R1 any](fn func(context.Context, A1, A2, A3, 
 		return
 	}
 }
-func UseErr61[A1, A2, A3, A4, A5, A6, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, error) {
+
+// UseErr61 add span when context not nil
+func UseErr61[A1, A2, A3, A4, A5, A6, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2715,7 +5932,7 @@ func UseErr61[A1, A2, A3, A4, A5, A6, R1 any](fn func(context.Context, A1, A2, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2729,12 +5946,63 @@ func UseErr61[A1, A2, A3, A4, A5, A6, R1 any](fn func(context.Context, A1, A2, A
 	}
 }
 
-func Use62[A1, A2, A3, A4, A5, A6, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption61 add span when context have a Telemetry
+func UseOption61[A1, A2, A3, A4, A5, A6, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) R1, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) R1 {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1 = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			r1 = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// UseOptionErr61 add span when context have a Telemetry
+func UseOptionErr61[A1, A2, A3, A4, A5, A6, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, error), sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, err = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			r1, err = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// Use62 add span when context not nil
+func Use62[A1, A2, A3, A4, A5, A6, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2746,12 +6014,15 @@ func Use62[A1, A2, A3, A4, A5, A6, R1, R2 any](fn func(context.Context, A1, A2, 
 		return
 	}
 }
-func UseErr62[A1, A2, A3, A4, A5, A6, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, error) {
+
+// UseErr62 add span when context not nil
+func UseErr62[A1, A2, A3, A4, A5, A6, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2759,7 +6030,7 @@ func UseErr62[A1, A2, A3, A4, A5, A6, R1, R2 any](fn func(context.Context, A1, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2773,12 +6044,63 @@ func UseErr62[A1, A2, A3, A4, A5, A6, R1, R2 any](fn func(context.Context, A1, A
 	}
 }
 
-func Use63[A1, A2, A3, A4, A5, A6, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption62 add span when context have a Telemetry
+func UseOption62[A1, A2, A3, A4, A5, A6, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2), sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2 = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			r1, r2 = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// UseOptionErr62 add span when context have a Telemetry
+func UseOptionErr62[A1, A2, A3, A4, A5, A6, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, error), sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, err = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			r1, r2, err = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// Use63 add span when context not nil
+func Use63[A1, A2, A3, A4, A5, A6, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2790,12 +6112,15 @@ func Use63[A1, A2, A3, A4, A5, A6, R1, R2, R3 any](fn func(context.Context, A1, 
 		return
 	}
 }
-func UseErr63[A1, A2, A3, A4, A5, A6, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, error) {
+
+// UseErr63 add span when context not nil
+func UseErr63[A1, A2, A3, A4, A5, A6, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2803,7 +6128,7 @@ func UseErr63[A1, A2, A3, A4, A5, A6, R1, R2, R3 any](fn func(context.Context, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2817,12 +6142,63 @@ func UseErr63[A1, A2, A3, A4, A5, A6, R1, R2, R3 any](fn func(context.Context, A
 	}
 }
 
-func Use64[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption63 add span when context have a Telemetry
+func UseOption63[A1, A2, A3, A4, A5, A6, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3), sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3 = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			r1, r2, r3 = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// UseOptionErr63 add span when context have a Telemetry
+func UseOptionErr63[A1, A2, A3, A4, A5, A6, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, error), sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, err = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			r1, r2, r3, err = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// Use64 add span when context not nil
+func Use64[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2834,12 +6210,15 @@ func Use64[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4 any](fn func(context.Context, 
 		return
 	}
 }
-func UseErr64[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, error) {
+
+// UseErr64 add span when context not nil
+func UseErr64[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2847,7 +6226,7 @@ func UseErr64[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4 any](fn func(context.Contex
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2861,12 +6240,63 @@ func UseErr64[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4 any](fn func(context.Contex
 	}
 }
 
-func Use65[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption64 add span when context have a Telemetry
+func UseOption64[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4), sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4 = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			r1, r2, r3, r4 = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// UseOptionErr64 add span when context have a Telemetry
+func UseOptionErr64[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, error), sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, err = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			r1, r2, r3, r4, err = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// Use65 add span when context not nil
+func Use65[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2878,12 +6308,15 @@ func Use65[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5 any](fn func(context.Conte
 		return
 	}
 }
-func UseErr65[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, error) {
+
+// UseErr65 add span when context not nil
+func UseErr65[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2891,7 +6324,7 @@ func UseErr65[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5 any](fn func(context.Co
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2905,12 +6338,63 @@ func UseErr65[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5 any](fn func(context.Co
 	}
 }
 
-func Use66[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption65 add span when context have a Telemetry
+func UseOption65[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5), sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5 = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			r1, r2, r3, r4, r5 = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// UseOptionErr65 add span when context have a Telemetry
+func UseOptionErr65[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, error), sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, err = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			r1, r2, r3, r4, r5, err = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// Use66 add span when context not nil
+func Use66[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2922,12 +6406,15 @@ func Use66[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6 any](fn func(context.C
 		return
 	}
 }
-func UseErr66[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, error) {
+
+// UseErr66 add span when context not nil
+func UseErr66[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2935,7 +6422,7 @@ func UseErr66[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6 any](fn func(contex
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2949,12 +6436,63 @@ func UseErr66[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6 any](fn func(contex
 	}
 }
 
-func Use67[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption66 add span when context have a Telemetry
+func UseOption66[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6), sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6 = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			r1, r2, r3, r4, r5, r6 = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// UseOptionErr66 add span when context have a Telemetry
+func UseOptionErr66[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, error), sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, err = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			r1, r2, r3, r4, r5, r6, err = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// Use67 add span when context not nil
+func Use67[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -2966,12 +6504,15 @@ func Use67[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7 any](fn func(conte
 		return
 	}
 }
-func UseErr67[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, error) {
+
+// UseErr67 add span when context not nil
+func UseErr67[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -2979,7 +6520,7 @@ func UseErr67[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7 any](fn func(co
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -2993,12 +6534,63 @@ func UseErr67[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7 any](fn func(co
 	}
 }
 
-func Use68[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption67 add span when context have a Telemetry
+func UseOption67[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7), sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7 = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7 = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// UseOptionErr67 add span when context have a Telemetry
+func UseOptionErr67[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, error), sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, err = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, err = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// Use68 add span when context not nil
+func Use68[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3010,12 +6602,15 @@ func Use68[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(c
 		return
 	}
 }
-func UseErr68[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+
+// UseErr68 add span when context not nil
+func UseErr68[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3023,7 +6618,7 @@ func UseErr68[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7, R8 any](fn fun
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3037,12 +6632,63 @@ func UseErr68[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7, R8 any](fn fun
 	}
 }
 
-func Use69[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8, R9), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption68 add span when context have a Telemetry
+func UseOption68[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8), sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// UseOptionErr68 add span when context have a Telemetry
+func UseOptionErr68[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8, error), sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// Use69 add span when context not nil
+func Use69[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8, R9), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3054,12 +6700,15 @@ func Use69[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn fu
 		return
 	}
 }
-func UseErr69[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+
+// UseErr69 add span when context not nil
+func UseErr69[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3067,7 +6716,7 @@ func UseErr69[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3081,12 +6730,63 @@ func UseErr69[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn
 	}
 }
 
-func Use70[A1, A2, A3, A4, A5, A6, A7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption69 add span when context have a Telemetry
+func UseOption69[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8, R9), sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// UseOptionErr69 add span when context have a Telemetry
+func UseOptionErr69[A1, A2, A3, A4, A5, A6, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), sp func(A1, A2, A3, A4, A5, A6) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(cx, a1, a2, a3, a4, a5, a6)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(ctx, a1, a2, a3, a4, a5, a6)
+		}
+		return
+	}
+}
+
+// Use70 add span when context not nil
+func Use70[A1, A2, A3, A4, A5, A6, A7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3097,12 +6797,15 @@ func Use70[A1, A2, A3, A4, A5, A6, A7 any](fn func(context.Context, A1, A2, A3, 
 		}
 	}
 }
-func UseErr70[A1, A2, A3, A4, A5, A6, A7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) error, name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) error {
+
+// UseErr70 add span when context not nil
+func UseErr70[A1, A2, A3, A4, A5, A6, A7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) error, pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) error {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3110,7 +6813,7 @@ func UseErr70[A1, A2, A3, A4, A5, A6, A7 any](fn func(context.Context, A1, A2, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3124,12 +6827,63 @@ func UseErr70[A1, A2, A3, A4, A5, A6, A7 any](fn func(context.Context, A1, A2, A
 	}
 }
 
-func Use71[A1, A2, A3, A4, A5, A6, A7, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) R1, name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) R1 {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption70 add span when context contains Telemetry
+func UseOption70[A1, A2, A3, A4, A5, A6, A7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7), sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+	}
+}
+
+// UseOptionErr70 add span when context contains Telemetry
+func UseOptionErr70[A1, A2, A3, A4, A5, A6, A7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) error, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) error {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			err = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			err = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// Use71 add span when context not nil
+func Use71[A1, A2, A3, A4, A5, A6, A7, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) R1, pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) R1 {
+
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3141,12 +6895,15 @@ func Use71[A1, A2, A3, A4, A5, A6, A7, R1 any](fn func(context.Context, A1, A2, 
 		return
 	}
 }
-func UseErr71[A1, A2, A3, A4, A5, A6, A7, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, error) {
+
+// UseErr71 add span when context not nil
+func UseErr71[A1, A2, A3, A4, A5, A6, A7, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3154,7 +6911,7 @@ func UseErr71[A1, A2, A3, A4, A5, A6, A7, R1 any](fn func(context.Context, A1, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3168,12 +6925,63 @@ func UseErr71[A1, A2, A3, A4, A5, A6, A7, R1 any](fn func(context.Context, A1, A
 	}
 }
 
-func Use72[A1, A2, A3, A4, A5, A6, A7, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption71 add span when context have a Telemetry
+func UseOption71[A1, A2, A3, A4, A5, A6, A7, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) R1, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) R1 {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1 = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			r1 = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// UseOptionErr71 add span when context have a Telemetry
+func UseOptionErr71[A1, A2, A3, A4, A5, A6, A7, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, error), sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, err = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			r1, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// Use72 add span when context not nil
+func Use72[A1, A2, A3, A4, A5, A6, A7, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3185,12 +6993,15 @@ func Use72[A1, A2, A3, A4, A5, A6, A7, R1, R2 any](fn func(context.Context, A1, 
 		return
 	}
 }
-func UseErr72[A1, A2, A3, A4, A5, A6, A7, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, error) {
+
+// UseErr72 add span when context not nil
+func UseErr72[A1, A2, A3, A4, A5, A6, A7, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3198,7 +7009,7 @@ func UseErr72[A1, A2, A3, A4, A5, A6, A7, R1, R2 any](fn func(context.Context, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3212,12 +7023,63 @@ func UseErr72[A1, A2, A3, A4, A5, A6, A7, R1, R2 any](fn func(context.Context, A
 	}
 }
 
-func Use73[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption72 add span when context have a Telemetry
+func UseOption72[A1, A2, A3, A4, A5, A6, A7, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2), sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2 = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			r1, r2 = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// UseOptionErr72 add span when context have a Telemetry
+func UseOptionErr72[A1, A2, A3, A4, A5, A6, A7, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, error), sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, err = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			r1, r2, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// Use73 add span when context not nil
+func Use73[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3229,12 +7091,15 @@ func Use73[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3 any](fn func(context.Context, 
 		return
 	}
 }
-func UseErr73[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, error) {
+
+// UseErr73 add span when context not nil
+func UseErr73[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3242,7 +7107,7 @@ func UseErr73[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3 any](fn func(context.Contex
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3256,12 +7121,64 @@ func UseErr73[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3 any](fn func(context.Contex
 	}
 }
 
-func Use74[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption73 add span when context have a Telemetry
+func UseOption73[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3), sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3) {
+
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3 = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			r1, r2, r3 = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// UseOptionErr73 add span when context have a Telemetry
+func UseOptionErr73[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, error), sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, err = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			r1, r2, r3, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// Use74 add span when context not nil
+func Use74[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3273,12 +7190,15 @@ func Use74[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4 any](fn func(context.Conte
 		return
 	}
 }
-func UseErr74[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, error) {
+
+// UseErr74 add span when context not nil
+func UseErr74[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3286,7 +7206,7 @@ func UseErr74[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4 any](fn func(context.Co
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3300,12 +7220,63 @@ func UseErr74[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4 any](fn func(context.Co
 	}
 }
 
-func Use75[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption74 add span when context have a Telemetry
+func UseOption74[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4), sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4 = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			r1, r2, r3, r4 = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// UseOptionErr74 add span when context have a Telemetry
+func UseOptionErr74[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, error), sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, err = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			r1, r2, r3, r4, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// Use75 add span when context not nil
+func Use75[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3317,12 +7288,15 @@ func Use75[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5 any](fn func(context.C
 		return
 	}
 }
-func UseErr75[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, error) {
+
+// UseErr75 add span when context not nil
+func UseErr75[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3330,7 +7304,7 @@ func UseErr75[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5 any](fn func(contex
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3344,12 +7318,63 @@ func UseErr75[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5 any](fn func(contex
 	}
 }
 
-func Use76[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption75 add span when context have a Telemetry
+func UseOption75[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5), sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5 = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			r1, r2, r3, r4, r5 = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// UseOptionErr75 add span when context have a Telemetry
+func UseOptionErr75[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, error), sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, err = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			r1, r2, r3, r4, r5, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// Use76 add span when context not nil
+func Use76[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3361,12 +7386,15 @@ func Use76[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6 any](fn func(conte
 		return
 	}
 }
-func UseErr76[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, error) {
+
+// UseErr76 add span when context not nil
+func UseErr76[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3374,7 +7402,7 @@ func UseErr76[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6 any](fn func(co
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3388,12 +7416,63 @@ func UseErr76[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6 any](fn func(co
 	}
 }
 
-func Use77[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption76 add span when context have a Telemetry
+func UseOption76[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6), sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6 = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			r1, r2, r3, r4, r5, r6 = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// UseOptionErr76 add span when context have a Telemetry
+func UseOptionErr76[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, error), sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, err = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			r1, r2, r3, r4, r5, r6, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// Use77 add span when context not nil
+func Use77[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3405,12 +7484,15 @@ func Use77[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7 any](fn func(c
 		return
 	}
 }
-func UseErr77[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, error) {
+
+// UseErr77 add span when context not nil
+func UseErr77[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3418,7 +7500,7 @@ func UseErr77[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7 any](fn fun
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3432,12 +7514,63 @@ func UseErr77[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7 any](fn fun
 	}
 }
 
-func Use78[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption77 add span when context have a Telemetry
+func UseOption77[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7), sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7 = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7 = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// UseOptionErr77 add span when context have a Telemetry
+func UseOptionErr77[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, error), sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, err = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// Use78 add span when context not nil
+func Use78[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3449,12 +7582,15 @@ func Use78[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7, R8 any](fn fu
 		return
 	}
 }
-func UseErr78[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+
+// UseErr78 add span when context not nil
+func UseErr78[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3462,7 +7598,7 @@ func UseErr78[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7, R8 any](fn
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3476,12 +7612,63 @@ func UseErr78[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7, R8 any](fn
 	}
 }
 
-func Use79[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8, R9), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption78 add span when context have a Telemetry
+func UseOption78[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8), sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// UseOptionErr78 add span when context have a Telemetry
+func UseOptionErr78[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8, error), sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// Use79 add span when context not nil
+func Use79[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8, R9), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3493,12 +7680,15 @@ func Use79[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](f
 		return
 	}
 }
-func UseErr79[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+
+// UseErr79 add span when context not nil
+func UseErr79[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3506,7 +7696,7 @@ func UseErr79[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7, R8, R9 any
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3520,12 +7710,63 @@ func UseErr79[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7, R8, R9 any
 	}
 }
 
-func Use80[A1, A2, A3, A4, A5, A6, A7, A8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption79 add span when context have a Telemetry
+func UseOption79[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8, R9), sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// UseOptionErr79 add span when context have a Telemetry
+func UseOptionErr79[A1, A2, A3, A4, A5, A6, A7, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), sp func(A1, A2, A3, A4, A5, A6, A7) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(cx, a1, a2, a3, a4, a5, a6, a7)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7)
+		}
+		return
+	}
+}
+
+// Use80 add span when context not nil
+func Use80[A1, A2, A3, A4, A5, A6, A7, A8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3536,12 +7777,15 @@ func Use80[A1, A2, A3, A4, A5, A6, A7, A8 any](fn func(context.Context, A1, A2, 
 		}
 	}
 }
-func UseErr80[A1, A2, A3, A4, A5, A6, A7, A8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) error, name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) error {
+
+// UseErr80 add span when context not nil
+func UseErr80[A1, A2, A3, A4, A5, A6, A7, A8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) error, pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) error {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3549,7 +7793,7 @@ func UseErr80[A1, A2, A3, A4, A5, A6, A7, A8 any](fn func(context.Context, A1, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3563,12 +7807,62 @@ func UseErr80[A1, A2, A3, A4, A5, A6, A7, A8 any](fn func(context.Context, A1, A
 	}
 }
 
-func Use81[A1, A2, A3, A4, A5, A6, A7, A8, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) R1, name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) R1 {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption80 add span when context contains Telemetry
+func UseOption80[A1, A2, A3, A4, A5, A6, A7, A8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8), sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+	}
+}
+
+// UseOptionErr80 add span when context contains Telemetry
+func UseOptionErr80[A1, A2, A3, A4, A5, A6, A7, A8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) error, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) error {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// Use81 add span when context not nil
+func Use81[A1, A2, A3, A4, A5, A6, A7, A8, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) R1, pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) R1 {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3580,12 +7874,15 @@ func Use81[A1, A2, A3, A4, A5, A6, A7, A8, R1 any](fn func(context.Context, A1, 
 		return
 	}
 }
-func UseErr81[A1, A2, A3, A4, A5, A6, A7, A8, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, error) {
+
+// UseErr81 add span when context not nil
+func UseErr81[A1, A2, A3, A4, A5, A6, A7, A8, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3593,7 +7890,7 @@ func UseErr81[A1, A2, A3, A4, A5, A6, A7, A8, R1 any](fn func(context.Context, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3607,12 +7904,63 @@ func UseErr81[A1, A2, A3, A4, A5, A6, A7, A8, R1 any](fn func(context.Context, A
 	}
 }
 
-func Use82[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption81 add span when context have a Telemetry
+func UseOption81[A1, A2, A3, A4, A5, A6, A7, A8, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) R1, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) R1 {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1 = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			r1 = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// UseOptionErr81 add span when context have a Telemetry
+func UseOptionErr81[A1, A2, A3, A4, A5, A6, A7, A8, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, error), sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			r1, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// Use82 add span when context not nil
+func Use82[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3624,12 +7972,15 @@ func Use82[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2 any](fn func(context.Context, 
 		return
 	}
 }
-func UseErr82[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, error) {
+
+// UseErr82 add span when context not nil
+func UseErr82[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3637,7 +7988,7 @@ func UseErr82[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2 any](fn func(context.Contex
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3651,12 +8002,63 @@ func UseErr82[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2 any](fn func(context.Contex
 	}
 }
 
-func Use83[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption82 add span when context have a Telemetry
+func UseOption82[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2), sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2 = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			r1, r2 = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// UseOptionErr82 add span when context have a Telemetry
+func UseOptionErr82[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, error), sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			r1, r2, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// Use83 add span when context not nil
+func Use83[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3668,12 +8070,15 @@ func Use83[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3 any](fn func(context.Conte
 		return
 	}
 }
-func UseErr83[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, error) {
+
+// UseErr83 add span when context not nil
+func UseErr83[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3681,7 +8086,7 @@ func UseErr83[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3 any](fn func(context.Co
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3695,12 +8100,63 @@ func UseErr83[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3 any](fn func(context.Co
 	}
 }
 
-func Use84[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption83 add span when context have a Telemetry
+func UseOption83[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3), sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3 = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			r1, r2, r3 = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// UseOptionErr83 add span when context have a Telemetry
+func UseOptionErr83[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, error), sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			r1, r2, r3, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// Use84 add span when context not nil
+func Use84[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3712,12 +8168,15 @@ func Use84[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4 any](fn func(context.C
 		return
 	}
 }
-func UseErr84[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, error) {
+
+// UseErr84 add span when context not nil
+func UseErr84[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3725,7 +8184,7 @@ func UseErr84[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4 any](fn func(contex
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3739,12 +8198,63 @@ func UseErr84[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4 any](fn func(contex
 	}
 }
 
-func Use85[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption84 add span when context have a Telemetry
+func UseOption84[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4), sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4 = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			r1, r2, r3, r4 = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// UseOptionErr84 add span when context have a Telemetry
+func UseOptionErr84[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, error), sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			r1, r2, r3, r4, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// Use85 add span when context not nil
+func Use85[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3756,12 +8266,15 @@ func Use85[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5 any](fn func(conte
 		return
 	}
 }
-func UseErr85[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, error) {
+
+// UseErr85 add span when context not nil
+func UseErr85[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3769,7 +8282,7 @@ func UseErr85[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5 any](fn func(co
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3783,12 +8296,63 @@ func UseErr85[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5 any](fn func(co
 	}
 }
 
-func Use86[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption85 add span when context have a Telemetry
+func UseOption85[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5), sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5 = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			r1, r2, r3, r4, r5 = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// UseOptionErr85 add span when context have a Telemetry
+func UseOptionErr85[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, error), sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			r1, r2, r3, r4, r5, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// Use86 add span when context not nil
+func Use86[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3800,12 +8364,15 @@ func Use86[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6 any](fn func(c
 		return
 	}
 }
-func UseErr86[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, error) {
+
+// UseErr86 add span when context not nil
+func UseErr86[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3813,7 +8380,7 @@ func UseErr86[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6 any](fn fun
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3827,12 +8394,63 @@ func UseErr86[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6 any](fn fun
 	}
 }
 
-func Use87[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption86 add span when context have a Telemetry
+func UseOption86[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6), sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6 = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			r1, r2, r3, r4, r5, r6 = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// UseOptionErr86 add span when context have a Telemetry
+func UseOptionErr86[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, error), sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			r1, r2, r3, r4, r5, r6, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// Use87 add span when context not nil
+func Use87[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3844,12 +8462,15 @@ func Use87[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7 any](fn fu
 		return
 	}
 }
-func UseErr87[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, error) {
+
+// UseErr87 add span when context not nil
+func UseErr87[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3857,7 +8478,7 @@ func UseErr87[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7 any](fn
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3871,12 +8492,63 @@ func UseErr87[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7 any](fn
 	}
 }
 
-func Use88[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption87 add span when context have a Telemetry
+func UseOption87[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7), sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7 = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7 = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// UseOptionErr87 add span when context have a Telemetry
+func UseOptionErr87[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, error), sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// Use88 add span when context not nil
+func Use88[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3888,12 +8560,15 @@ func Use88[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7, R8 any](f
 		return
 	}
 }
-func UseErr88[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+
+// UseErr88 add span when context not nil
+func UseErr88[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3901,7 +8576,7 @@ func UseErr88[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7, R8 any
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3915,12 +8590,63 @@ func UseErr88[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7, R8 any
 	}
 }
 
-func Use89[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8, R9), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption88 add span when context have a Telemetry
+func UseOption88[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8), sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// UseOptionErr88 add span when context have a Telemetry
+func UseOptionErr88[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8, error), sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// Use89 add span when context not nil
+func Use89[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8, R9), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3932,12 +8658,15 @@ func Use89[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7, R8, R9 an
 		return
 	}
 }
-func UseErr89[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+
+// UseErr89 add span when context not nil
+func UseErr89[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3945,7 +8674,7 @@ func UseErr89[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7, R8, R9
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -3959,12 +8688,63 @@ func UseErr89[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7, R8, R9
 	}
 }
 
-func Use90[A1, A2, A3, A4, A5, A6, A7, A8, A9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption89 add span when context have a Telemetry
+func UseOption89[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8, R9), sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// UseOptionErr89 add span when context have a Telemetry
+func UseOptionErr89[A1, A2, A3, A4, A5, A6, A7, A8, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), sp func(A1, A2, A3, A4, A5, A6, A7, A8) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8)
+		}
+		return
+	}
+}
+
+// Use90 add span when context not nil
+func Use90[A1, A2, A3, A4, A5, A6, A7, A8, A9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -3975,12 +8755,15 @@ func Use90[A1, A2, A3, A4, A5, A6, A7, A8, A9 any](fn func(context.Context, A1, 
 		}
 	}
 }
-func UseErr90[A1, A2, A3, A4, A5, A6, A7, A8, A9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) error, name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) error {
+
+// UseErr90 add span when context not nil
+func UseErr90[A1, A2, A3, A4, A5, A6, A7, A8, A9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) error, pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) error {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -3988,7 +8771,7 @@ func UseErr90[A1, A2, A3, A4, A5, A6, A7, A8, A9 any](fn func(context.Context, A
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -4002,12 +8785,62 @@ func UseErr90[A1, A2, A3, A4, A5, A6, A7, A8, A9 any](fn func(context.Context, A
 	}
 }
 
-func Use91[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) R1, name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) R1 {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption90 add span when context contains Telemetry
+func UseOption90[A1, A2, A3, A4, A5, A6, A7, A8, A9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9), sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+	}
+}
+
+// UseOptionErr90 add span when context contains Telemetry
+func UseOptionErr90[A1, A2, A3, A4, A5, A6, A7, A8, A9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) error, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) error {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// Use91 add span when context not nil
+func Use91[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) R1, pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) R1 {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -4019,12 +8852,15 @@ func Use91[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1 any](fn func(context.Context, 
 		return
 	}
 }
-func UseErr91[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, error) {
+
+// UseErr91 add span when context not nil
+func UseErr91[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -4032,7 +8868,7 @@ func UseErr91[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1 any](fn func(context.Contex
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -4046,12 +8882,63 @@ func UseErr91[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1 any](fn func(context.Contex
 	}
 }
 
-func Use92[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption91 add span when context have a Telemetry
+func UseOption91[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) R1, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) R1 {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1 = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			r1 = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// UseOptionErr91 add span when context have a Telemetry
+func UseOptionErr91[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, error), sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			r1, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// Use92 add span when context not nil
+func Use92[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -4063,12 +8950,15 @@ func Use92[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2 any](fn func(context.Conte
 		return
 	}
 }
-func UseErr92[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, error) {
+
+// UseErr92 add span when context not nil
+func UseErr92[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -4076,7 +8966,7 @@ func UseErr92[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2 any](fn func(context.Co
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -4090,12 +8980,63 @@ func UseErr92[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2 any](fn func(context.Co
 	}
 }
 
-func Use93[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption92 add span when context have a Telemetry
+func UseOption92[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2), sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2 = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			r1, r2 = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// UseOptionErr92 add span when context have a Telemetry
+func UseOptionErr92[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, error), sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			r1, r2, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// Use93 add span when context not nil
+func Use93[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -4107,12 +9048,15 @@ func Use93[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3 any](fn func(context.C
 		return
 	}
 }
-func UseErr93[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, error) {
+
+// UseErr93 add span when context not nil
+func UseErr93[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -4120,7 +9064,7 @@ func UseErr93[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3 any](fn func(contex
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -4134,12 +9078,63 @@ func UseErr93[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3 any](fn func(contex
 	}
 }
 
-func Use94[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption93 add span when context have a Telemetry
+func UseOption93[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3), sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3 = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			r1, r2, r3 = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// UseOptionErr93 add span when context have a Telemetry
+func UseOptionErr93[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, error), sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			r1, r2, r3, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// Use94 add span when context not nil
+func Use94[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -4151,12 +9146,15 @@ func Use94[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4 any](fn func(conte
 		return
 	}
 }
-func UseErr94[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, error) {
+
+// UseErr94 add span when context not nil
+func UseErr94[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -4164,7 +9162,7 @@ func UseErr94[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4 any](fn func(co
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -4178,12 +9176,63 @@ func UseErr94[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4 any](fn func(co
 	}
 }
 
-func Use95[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption94 add span when context have a Telemetry
+func UseOption94[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4), sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4 = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			r1, r2, r3, r4 = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// UseOptionErr94 add span when context have a Telemetry
+func UseOptionErr94[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, error), sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			r1, r2, r3, r4, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// Use95 add span when context not nil
+func Use95[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -4195,12 +9244,15 @@ func Use95[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5 any](fn func(c
 		return
 	}
 }
-func UseErr95[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, error) {
+
+// UseErr95 add span when context not nil
+func UseErr95[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -4208,7 +9260,7 @@ func UseErr95[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5 any](fn fun
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -4222,12 +9274,63 @@ func UseErr95[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5 any](fn fun
 	}
 }
 
-func Use96[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption95 add span when context have a Telemetry
+func UseOption95[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5), sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5 = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			r1, r2, r3, r4, r5 = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// UseOptionErr95 add span when context have a Telemetry
+func UseOptionErr95[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, error), sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			r1, r2, r3, r4, r5, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// Use96 add span when context not nil
+func Use96[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -4239,12 +9342,15 @@ func Use96[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6 any](fn fu
 		return
 	}
 }
-func UseErr96[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, error) {
+
+// UseErr96 add span when context not nil
+func UseErr96[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -4252,7 +9358,7 @@ func UseErr96[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6 any](fn
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -4266,12 +9372,63 @@ func UseErr96[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6 any](fn
 	}
 }
 
-func Use97[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption96 add span when context have a Telemetry
+func UseOption96[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6), sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6 = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			r1, r2, r3, r4, r5, r6 = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// UseOptionErr96 add span when context have a Telemetry
+func UseOptionErr96[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, error), sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			r1, r2, r3, r4, r5, r6, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// Use97 add span when context not nil
+func Use97[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -4283,12 +9440,15 @@ func Use97[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7 any](f
 		return
 	}
 }
-func UseErr97[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, error) {
+
+// UseErr97 add span when context not nil
+func UseErr97[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -4296,7 +9456,7 @@ func UseErr97[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7 any
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -4310,12 +9470,63 @@ func UseErr97[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7 any
 	}
 }
 
-func Use98[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption97 add span when context have a Telemetry
+func UseOption97[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7), sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7 = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7 = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// UseOptionErr97 add span when context have a Telemetry
+func UseOptionErr97[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, error), sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// Use98 add span when context not nil
+func Use98[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -4327,12 +9538,15 @@ func Use98[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7, R8 an
 		return
 	}
 }
-func UseErr98[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+
+// UseErr98 add span when context not nil
+func UseErr98[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -4340,7 +9554,7 @@ func UseErr98[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7, R8
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
@@ -4354,12 +9568,64 @@ func UseErr98[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7, R8
 	}
 }
 
-func Use99[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8, R9), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
-	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+// UseOption98 add span when context have a Telemetry
+func UseOption98[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8), sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8 = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// UseOptionErr98 add span when context have a Telemetry
+func UseOptionErr98[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7, R8 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8, error), sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// Use99 add span when context not nil
+func Use99[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8, R9), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
+			defer func() {
+				defer s.End()
 				if r, ok := t.HandleRecover(recover()); ok {
 					panic(r)
 				}
@@ -4371,12 +9637,15 @@ func Use99[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7, R8, R
 		return
 	}
 }
-func UseErr99[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), name string, opts ...trace.SpanStartOption) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+
+// UseErr99 add span when context not nil
+func UseErr99[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), pp TelemetryProviderFn, sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
 	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
-		if t := ByContext(ctx, opts...); t != nil {
-			cx, span := t.StartSpan(name, ctx)
+		if t, cx := ByContext(ctx, pp); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, cx, a...)
 			defer func() {
-				defer span.End()
+				defer s.End()
 				if err != nil {
 					t.HandleError(err)
 				} else if r, ok := t.HandleRecover(recover()); ok {
@@ -4384,7 +9653,56 @@ func UseErr99[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7, R8
 					case error:
 						err = x
 					case string:
-						err = fmt.Errorf("%s", x)
+						err = errors.New(x)
+					default:
+						err = fmt.Errorf("%v", x)
+					}
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9, err = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// UseOption99 add span when context have a Telemetry
+func UseOption99[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8, R9), sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8, R9) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if r, ok := t.HandleRecover(recover()); ok {
+					panic(r)
+				}
+			}()
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(cx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		} else {
+			r1, r2, r3, r4, r5, r6, r7, r8, r9 = fn(ctx, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+		}
+		return
+	}
+}
+
+// UseOptionErr99 add span when context have a Telemetry
+func UseOptionErr99[A1, A2, A3, A4, A5, A6, A7, A8, A9, R1, R2, R3, R4, R5, R6, R7, R8, R9 any](fn func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error), sp func(A1, A2, A3, A4, A5, A6, A7, A8, A9) (string, []attribute.KeyValue)) func(context.Context, A1, A2, A3, A4, A5, A6, A7, A8, A9) (R1, R2, R3, R4, R5, R6, R7, R8, R9, error) {
+	return func(ctx context.Context, a1 A1, a2 A2, a3 A3, a4 A4, a5 A5, a6 A6, a7 A7, a8 A8, a9 A9) (r1 R1, r2 R2, r3 R3, r4 R4, r5 R5, r6 R6, r7 R7, r8 R8, r9 R9, err error) {
+		if t := FromContext(ctx); t != nil {
+			n, a := sp(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+			cx, s := t.StartSpan(n, ctx, a...)
+			defer func() {
+				defer s.End()
+				if err != nil {
+					t.HandleError(err)
+				} else if r, ok := t.HandleRecover(recover()); ok {
+					switch x := r.(type) {
+					case error:
+						err = x
+					case string:
+						err = errors.New(x)
 					default:
 						err = fmt.Errorf("%v", x)
 					}
