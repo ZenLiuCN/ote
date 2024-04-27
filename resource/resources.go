@@ -1,4 +1,4 @@
-package common
+package resource
 
 import (
 	"context"
@@ -22,7 +22,7 @@ func ExecutableName() string {
 	return filepath.Base(os.Args[0])
 }
 
-type ResourceConfig struct {
+type Config struct {
 	Service   sql.NullString //service name
 	Container sql.NullBool   //container info
 	Host      sql.NullBool   //host info
@@ -32,7 +32,7 @@ type ResourceConfig struct {
 	SDK       sql.NullBool   //open telemetry sdk flags
 }
 
-func computeFlag(c *ResourceConfig) (bool, int) {
+func computeFlag(c *Config) (bool, int) {
 	f := 0
 	if !c.Container.Valid || c.Container.Bool {
 		f &= 1 << 0
@@ -56,7 +56,7 @@ func computeFlag(c *ResourceConfig) (bool, int) {
 	same := f == flags
 	return same, f
 }
-func ParseResource(ctx context.Context, c *ResourceConfig) (res *resource.Resource, err error) {
+func ParseResource(ctx context.Context, c *Config) (res *resource.Resource, err error) {
 	f := 0
 	if global != nil {
 		var same bool

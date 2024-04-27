@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	. "github.com/ZenLiuCN/ote/common"
+	. "github.com/ZenLiuCN/ote/resource"
 	otlp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/sdk/trace"
 	"log/slog"
@@ -25,7 +25,7 @@ type TraceConfig struct {
 	QueueSize          sql.NullInt32
 	QueueBlocking      sql.NullBool
 	Sampler            *SamplerConfig
-	*ResourceConfig
+	*Config
 }
 type SamplerConfig struct {
 	Name    string

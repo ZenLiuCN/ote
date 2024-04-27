@@ -2,12 +2,12 @@ package prometheus
 
 import (
 	"context"
-	. "github.com/ZenLiuCN/ote/common"
+	. "github.com/ZenLiuCN/ote/resource"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/sdk/metric"
 )
 
-func NewMeterProvider(ctx context.Context, c *ResourceConfig) (*metric.MeterProvider, error) {
+func NewMeterProvider(ctx context.Context, c *Config) (*metric.MeterProvider, error) {
 	var opt []prometheus.Option
 	{
 
