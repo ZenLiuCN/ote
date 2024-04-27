@@ -7,7 +7,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric"
 )
 
-func NewMeterProvider(ctx context.Context, c Config) (*metric.MeterProvider, error) {
+func NewMeterProvider(ctx context.Context, c *ResourceConfig) (*metric.MeterProvider, error) {
 	var opt []prometheus.Option
 	{
 

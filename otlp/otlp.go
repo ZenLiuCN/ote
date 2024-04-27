@@ -2,6 +2,7 @@ package otlp
 
 import (
 	"context"
+	"database/sql"
 
 	. "github.com/ZenLiuCN/ote/common"
 	otlp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -10,39 +11,50 @@ import (
 	"time"
 )
 
-func NewTraceProvider(ctx context.Context, cfg Config) (*trace.TracerProvider, error) {
+type TraceConfig struct {
+	Endpoint           string
+	Compress           string
+	Insecure           sql.NullBool
+	Reconnect          time.Duration
+	Timeout            time.Duration
+	Retry              *otlp.RetryConfig
+	Headers            map[string]string
+	ExportTimeout      time.Duration
+	ExportBatchSize    sql.NullInt32
+	ExportBatchTimeout time.Duration
+	QueueSize          sql.NullInt32
+	QueueBlocking      sql.NullBool
+	Sampler            *SamplerConfig
+	*ResourceConfig
+}
+type SamplerConfig struct {
+	Name    string
+	Based   string
+	Ratio   sql.NullFloat64
+	Options []string
+}
+
+func NewTraceProvider(ctx context.Context, cfg *TraceConfig) (*trace.TracerProvider, error) {
 	var opt []otlp.Option
 	{
-		opt = append(opt, otlp.WithEndpointURL(Required("telemetry.oltp.endpoint", cfg, cfg.GetString)))
-		if d := cfg.GetString("telemetry.otlp.compress", ""); d != "" {
+		opt = append(opt, otlp.WithEndpointURL(cfg.Endpoint))
+		if d := cfg.Compress; d != "" {
 			opt = append(opt, otlp.WithCompressor(d))
 		}
-		if cfg.GetBoolean("telemetry.otlp.insecure", false) {
+		if cfg.Insecure.Valid && cfg.Insecure.Bool {
 			opt = append(opt, otlp.WithInsecure())
 		}
-		if d := cfg.GetTimeDurationInfiniteNotAllowed("telemetry.otlp.reconnect"); d != time.Duration(0) {
+		if d := cfg.Reconnect; d != time.Duration(0) {
 			opt = append(opt, otlp.WithReconnectionPeriod(d))
 		}
-		if d := cfg.GetTimeDurationInfiniteNotAllowed("telemetry.otlp.timeout"); d != time.Duration(0) {
+		if d := cfg.Timeout; d != time.Duration(0) {
 			opt = append(opt, otlp.WithTimeout(d))
 		}
-		if d := cfg.GetObject("telemetry.otlp.retry"); d != nil {
-			var retry otlp.RetryConfig
-			retry.Enabled = cfg.GetBoolean("telemetry.otlp.retry.enable", true)
-			retry.InitialInterval = cfg.GetTimeDurationInfiniteNotAllowed("telemetry.otlp.retry.initialInterval", time.Second*5)
-			retry.MaxInterval = cfg.GetTimeDurationInfiniteNotAllowed("telemetry.otlp.retry.maxInterval", time.Second*30)
-			retry.MaxElapsedTime = cfg.GetTimeDurationInfiniteNotAllowed("telemetry.otlp.retry.maxElapsedTime", time.Minute)
-			opt = append(opt, otlp.WithRetry(retry))
+		if d := cfg.Retry; d != nil {
+			opt = append(opt, otlp.WithRetry(*d))
 		}
-		if d := cfg.GetObject("telemetry.otlp.headers"); d != nil {
-			mp := d.GetStringMap("")
-			if len(mp) != 0 {
-				m := make(map[string]string, len(mp))
-				for s, config := range mp {
-					m[s] = config.GetString("")
-				}
-				opt = append(opt, otlp.WithHeaders(m))
-			}
+		if d := cfg.Headers; len(d) > 0 {
+			opt = append(opt, otlp.WithHeaders(d))
 		}
 	}
 	traceExporter, err := otlp.New(ctx, opt...)
@@ -54,31 +66,27 @@ func NewTraceProvider(ctx context.Context, cfg Config) (*trace.TracerProvider, e
 		//!! batch
 		{
 			var spanOpt []trace.BatchSpanProcessorOption
-			Exists("telemetry.otlp.trace.export.timeout", cfg, cfg.GetTimeDuration, func(d time.Duration) {
-				spanOpt = append(spanOpt, trace.WithExportTimeout(d))
-			})
-			Exists("telemetry.otlp.trace.export.size", cfg, cfg.GetInt32, func(d int32) {
-				spanOpt = append(spanOpt, trace.WithMaxExportBatchSize(int(d)))
-			})
-			Exists("telemetry.otlp.trace.batch.size", cfg, cfg.GetInt32, func(d int32) {
-				spanOpt = append(spanOpt, trace.WithMaxExportBatchSize(int(d)))
-			})
-			Exists("telemetry.otlp.trace.batch.timeout", cfg, cfg.GetTimeDuration, func(d time.Duration) {
-				spanOpt = append(spanOpt, trace.WithBatchTimeout(d))
-			})
-			Exists("telemetry.otlp.trace.queue.size", cfg, cfg.GetInt32, func(d int32) {
-				spanOpt = append(spanOpt, trace.WithMaxQueueSize(int(d)))
-			})
-			Exists("telemetry.otlp.trace.queue.blocking", cfg, cfg.GetBoolean, func(d bool) {
-				if d {
-					spanOpt = append(spanOpt, trace.WithBlocking())
-				}
-			})
+			if cfg.ExportTimeout != 0 {
+				spanOpt = append(spanOpt, trace.WithExportTimeout(cfg.ExportTimeout))
+			}
+			if cfg.ExportBatchSize.Valid {
+				spanOpt = append(spanOpt, trace.WithMaxExportBatchSize(int(cfg.ExportBatchSize.Int32)))
+			}
+
+			if cfg.ExportBatchTimeout != 0 {
+				spanOpt = append(spanOpt, trace.WithBatchTimeout(cfg.ExportBatchTimeout))
+			}
+			if cfg.QueueSize.Valid {
+				spanOpt = append(spanOpt, trace.WithMaxQueueSize(int(cfg.QueueSize.Int32)))
+			}
+			if cfg.QueueBlocking.Valid && cfg.QueueBlocking.Bool {
+				spanOpt = append(spanOpt, trace.WithBlocking())
+			}
 			opts = append(opts, trace.WithBatcher(traceExporter, spanOpt...))
 		}
 		//!! resource
 		{
-			res, err := ParseResource(ctx, cfg)
+			res, err := ParseResource(ctx, cfg.ResourceConfig)
 			if err != nil {
 				return nil, err
 			}
@@ -86,8 +94,8 @@ func NewTraceProvider(ctx context.Context, cfg Config) (*trace.TracerProvider, e
 		}
 		//!! sampler
 		{
-			if sampler := cfg.GetObject("telemetry.otlp.trace.sample"); sampler != nil {
-				switch sampler.GetString("name") {
+			if sampler := cfg.Sampler; sampler != nil {
+				switch sampler.Name {
 				case "always":
 					opts = append(opts, trace.WithSampler(trace.AlwaysSample()))
 				case "never":
@@ -95,20 +103,24 @@ func NewTraceProvider(ctx context.Context, cfg Config) (*trace.TracerProvider, e
 				case "parent":
 					var options []trace.ParentBasedSamplerOption
 					var sam trace.Sampler
-					switch sampler.GetString("based") {
+					switch sampler.Based {
 					case "always":
 						sam = trace.AlwaysSample()
 					case "ratio":
-						sam = trace.TraceIDRatioBased(sampler.GetFloat64("ratio", 1))
+						ratio := 1.0
+						if sampler.Ratio.Valid {
+							ratio = sampler.Ratio.Float64
+						}
+						sam = trace.TraceIDRatioBased(ratio)
 					case "never":
 						sam = trace.NeverSample()
 					default:
 						slog.Error("telemetry.oltp.trace.sample.based not one of always|never|ratio, will use never as default",
-							"based", sampler.GetString("based"),
+							"based", sampler.Based,
 						)
 						sam = trace.NeverSample()
 					}
-					for _, s := range sampler.GetStringList("options") {
+					for _, s := range sampler.Options {
 						switch s {
 						case "withRemote":
 							options = append(options, trace.WithRemoteParentSampled(sam))
@@ -124,8 +136,8 @@ func NewTraceProvider(ctx context.Context, cfg Config) (*trace.TracerProvider, e
 					}
 					opts = append(opts, trace.WithSampler(trace.ParentBased(sam, options...)))
 				default:
-					slog.Error("telemetry.oltp.trace.sample.name not one of always|never|parent, will use system default",
-						"name", sampler.GetString("name"),
+					slog.Error("sampler.name not one of always|never|parent, will use system default",
+						"name", sampler.Name,
 					)
 				}
 			}

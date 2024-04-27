@@ -3,7 +3,6 @@ package ote
 import (
 	"context"
 	"errors"
-	. "github.com/ZenLiuCN/ote/common"
 	"github.com/ZenLiuCN/ote/otlp"
 	"github.com/ZenLiuCN/ote/prometheus"
 
@@ -20,7 +19,7 @@ var (
 func HaveTelemetry() bool {
 	return shutdown != nil
 }
-func SetupTelemetry(ctx context.Context, conf Config) (s func(context.Context) error, err error) {
+func SetupTelemetry(ctx context.Context, conf *otlp.TraceConfig) (s func(context.Context) error, err error) {
 	if HaveTelemetry() {
 		return shutdown, nil
 	}
@@ -38,7 +37,7 @@ func SetupTelemetry(ctx context.Context, conf Config) (s func(context.Context) e
 	handleErr := func(inErr error) {
 		err = errors.Join(inErr, shutdown(ctx))
 	}
-	prop := NewPropagator(conf)
+	prop := NewPropagator()
 	otel.SetTextMapPropagator(prop)
 	var tracerProvider *trace.TracerProvider
 	if tracerProvider, err = otlp.NewTraceProvider(ctx, conf); err != nil {
@@ -49,7 +48,7 @@ func SetupTelemetry(ctx context.Context, conf Config) (s func(context.Context) e
 		otel.SetTracerProvider(tracerProvider)
 	}
 	var meterProvider *metric.MeterProvider
-	if meterProvider, err = prometheus.NewMeterProvider(ctx, conf); err != nil {
+	if meterProvider, err = prometheus.NewMeterProvider(ctx, conf.ResourceConfig); err != nil {
 		handleErr(err)
 		return
 	} else {

@@ -3,7 +3,6 @@ package ote
 import (
 	"context"
 	"fmt"
-	"github.com/ZenLiuCN/ote/common"
 	rt "go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -213,11 +212,11 @@ func InstrumentOption(sn SpanProviderFn, service ServiceFunc) ServiceFunc {
 }
 
 // RuntimeInstrument inject runtime Telemetry
-func RuntimeInstrument(c common.Config) {
-	if c == nil {
+func RuntimeInstrument(interval time.Duration) {
+	if interval == 0 {
 		Handle(rt.Start(rt.WithMinimumReadMemStatsInterval(time.Second)))
 	} else {
-		Handle(rt.Start(rt.WithMinimumReadMemStatsInterval(c.GetTimeDurationInfiniteNotAllowed("telemetry.runtime.interval", time.Second))))
+		Handle(rt.Start(rt.WithMinimumReadMemStatsInterval(interval)))
 	}
 
 }
