@@ -48,7 +48,7 @@ func SetupTelemetry(ctx context.Context, conf *otlp.TraceConfig) (s func(context
 		otel.SetTracerProvider(tracerProvider)
 	}
 	var meterProvider *metric.MeterProvider
-	if meterProvider, err = prometheus.NewMeterProvider(ctx, conf.ResourceConfig); err != nil {
+	if meterProvider, err = prometheus.NewMeterProvider(ctx, conf.Config); err != nil {
 		handleErr(err)
 		return
 	} else {

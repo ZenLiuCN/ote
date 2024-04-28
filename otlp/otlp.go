@@ -86,7 +86,7 @@ func NewTraceProvider(ctx context.Context, cfg *TraceConfig) (*trace.TracerProvi
 		}
 		//!! resource
 		{
-			res, err := ParseResource(ctx, cfg.ResourceConfig)
+			res, err := ParseResource(ctx, cfg.Config)
 			if err != nil {
 				return nil, err
 			}
