@@ -22,8 +22,8 @@ func TestGenerate(t *testing.T) {
 				{
 					_, _ = fmt.Fprintf(buf, `
 //Use%[1]d%[2]d add span when context not nil
-func Use%[1]d%[2]d(fn func(context.Context),pp TelemetryProviderFn,sp SpanProviderFn) func(context.Context) {
-	return func(ctx context.Context) {
+func Use%[1]d%[2]d(fn func(context.SpecContext),pp TelemetryProviderFn,sp SpanProviderFn) func(context.SpecContext) {
+	return func(ctx context.SpecContext) {
 		if t,s,cx := SpanByContext(ctx,pp,sp); s != nil {
 			defer func() {
 				defer s.End()
@@ -38,8 +38,8 @@ func Use%[1]d%[2]d(fn func(context.Context),pp TelemetryProviderFn,sp SpanProvid
 	}
 }
 //UseErr%[1]d%[2]d add span when context not nil
-func UseErr%[1]d%[2]d(fn func(context.Context) error, pp TelemetryProviderFn,sp SpanProviderFn) func(context.Context) error {
-	return func(ctx context.Context) (err error) {
+func UseErr%[1]d%[2]d(fn func(context.SpecContext) error, pp TelemetryProviderFn,sp SpanProviderFn) func(context.SpecContext) error {
+	return func(ctx context.SpecContext) (err error) {
 		if t,s,cx := SpanByContext(ctx,pp,sp); s != nil {
 			defer func() {
 				defer s.End()
@@ -64,8 +64,8 @@ func UseErr%[1]d%[2]d(fn func(context.Context) error, pp TelemetryProviderFn,sp 
 	}
 }
 //UseOption%[1]d%[2]d add span when context contains Telemetry
-func UseOption%[1]d%[2]d(fn func(context.Context), sp SpanProviderFn) func(context.Context) {
-	return func(ctx context.Context) {
+func UseOption%[1]d%[2]d(fn func(context.SpecContext), sp SpanProviderFn) func(context.SpecContext) {
+	return func(ctx context.SpecContext) {
 		if t,s,cx := SpanFromContext(ctx,sp); s != nil {
 			defer func() {
 				defer s.End()
@@ -80,8 +80,8 @@ func UseOption%[1]d%[2]d(fn func(context.Context), sp SpanProviderFn) func(conte
 	}
 }
 //UseOptionErr%[1]d%[2]d add span when context contains Telemetry
-func UseOptionErr%[1]d%[2]d(fn func(context.Context) error,sp SpanProviderFn) func(context.Context) error {
-	return func(ctx context.Context) (err error) {
+func UseOptionErr%[1]d%[2]d(fn func(context.SpecContext) error,sp SpanProviderFn) func(context.SpecContext) error {
+	return func(ctx context.SpecContext) (err error) {
 		if t,s,cx := SpanFromContext(ctx,sp); s != nil {
 			defer func() {
 				defer s.End()
@@ -124,8 +124,8 @@ func UseOptionErr%[1]d%[2]d(fn func(context.Context) error,sp SpanProviderFn) fu
 					}
 					_, _ = fmt.Fprintf(buf, `
 //Use%[1]d%[2]d add span when context not nil
-func Use%[1]d%[2]d[%[3]s any](fn func(context.Context,%[3]s), pp TelemetryProviderFn,sp func(%[3]s)(string,[]attribute.KeyValue)) func(context.Context,%[3]s) {
-	return func(ctx context.Context,%[4]s) {
+func Use%[1]d%[2]d[%[3]s any](fn func(context.SpecContext,%[3]s), pp TelemetryProviderFn,sp func(%[3]s)(string,[]attribute.KeyValue)) func(context.SpecContext,%[3]s) {
+	return func(ctx context.SpecContext,%[4]s) {
 		if t,cx := ByContext(ctx,pp); t != nil {
 			n,a:=sp(%[5]s)
 			cx, s:=t.StartSpan(n,cx, a...)
@@ -142,8 +142,8 @@ func Use%[1]d%[2]d[%[3]s any](fn func(context.Context,%[3]s), pp TelemetryProvid
 	}
 }
 //UseErr%[1]d%[2]d add span when context not nil
-func UseErr%[1]d%[2]d[%[3]s any](fn func(context.Context,%[3]s) error, pp TelemetryProviderFn,sp func(%[3]s)(string,[]attribute.KeyValue)) func(context.Context,%[3]s) error {
-	return func(ctx context.Context,%[4]s) (err error) {
+func UseErr%[1]d%[2]d[%[3]s any](fn func(context.SpecContext,%[3]s) error, pp TelemetryProviderFn,sp func(%[3]s)(string,[]attribute.KeyValue)) func(context.SpecContext,%[3]s) error {
+	return func(ctx context.SpecContext,%[4]s) (err error) {
 		if t,cx := ByContext(ctx,pp); t != nil {
 			n,a:=sp(%[5]s)
 			cx, s:=t.StartSpan(n,cx,a...)
@@ -170,8 +170,8 @@ func UseErr%[1]d%[2]d[%[3]s any](fn func(context.Context,%[3]s) error, pp Teleme
 	}
 }
 //UseOption%[1]d%[2]d add span when context contains Telemetry
-func UseOption%[1]d%[2]d[%[3]s any](fn func(context.Context,%[3]s), sp func(%[3]s)(string,[]attribute.KeyValue)) func(context.Context,%[3]s) {
-	return func(ctx context.Context,%[4]s) {
+func UseOption%[1]d%[2]d[%[3]s any](fn func(context.SpecContext,%[3]s), sp func(%[3]s)(string,[]attribute.KeyValue)) func(context.SpecContext,%[3]s) {
+	return func(ctx context.SpecContext,%[4]s) {
 		if t := FromContext(ctx); t != nil {
 			n,a:=sp(%[5]s)
 			cx, s:=t.StartSpan(n,ctx, a...)
@@ -188,8 +188,8 @@ func UseOption%[1]d%[2]d[%[3]s any](fn func(context.Context,%[3]s), sp func(%[3]
 	}
 }
 //UseOptionErr%[1]d%[2]d add span when context contains Telemetry
-func UseOptionErr%[1]d%[2]d[%[3]s any](fn func(context.Context,%[3]s) error, sp func(%[3]s)(string,[]attribute.KeyValue)) func(context.Context,%[3]s) error {
-	return func(ctx context.Context,%[4]s) (err error) {
+func UseOptionErr%[1]d%[2]d[%[3]s any](fn func(context.SpecContext,%[3]s) error, sp func(%[3]s)(string,[]attribute.KeyValue)) func(context.SpecContext,%[3]s) error {
+	return func(ctx context.SpecContext,%[4]s) (err error) {
 		if t := FromContext(ctx); t != nil {
 			n,a:=sp(%[5]s)
 			cx,s:=t.StartSpan(n,ctx, a...)
@@ -234,8 +234,8 @@ func UseOptionErr%[1]d%[2]d[%[3]s any](fn func(context.Context,%[3]s) error, sp 
 					}
 					_, _ = fmt.Fprintf(buf, `
 //Use%[1]d%[2]d add span when context not nil
-func Use%[1]d%[2]d[%[3]s any](fn func(context.Context)(%[3]s), pp TelemetryProviderFn,sp SpanProviderFn) func(context.Context)(%[3]s) {
-	return func(ctx context.Context)(%[4]s) {
+func Use%[1]d%[2]d[%[3]s any](fn func(context.SpecContext)(%[3]s), pp TelemetryProviderFn,sp SpanProviderFn) func(context.SpecContext)(%[3]s) {
+	return func(ctx context.SpecContext)(%[4]s) {
 		if t,s,cx := SpanByContext(ctx,pp,sp); s != nil {
 			defer func() {
 				defer s.End()
@@ -251,8 +251,8 @@ func Use%[1]d%[2]d[%[3]s any](fn func(context.Context)(%[3]s), pp TelemetryProvi
 	}
 }
 //UseErr%[1]d%[2]d add span when context not nil
-func UseErr%[1]d%[2]d[%[3]s any](fn func(context.Context)(%[3]s,error),pp TelemetryProviderFn,sp SpanProviderFn) func(context.Context)(%[3]s,error) {
-	return func(ctx context.Context) (%[4]s,err error) {
+func UseErr%[1]d%[2]d[%[3]s any](fn func(context.SpecContext)(%[3]s,error),pp TelemetryProviderFn,sp SpanProviderFn) func(context.SpecContext)(%[3]s,error) {
+	return func(ctx context.SpecContext) (%[4]s,err error) {
 	if t,s,cx := SpanByContext(ctx,pp,sp); s != nil {
 			defer func() {
 				defer s.End()
@@ -277,8 +277,8 @@ func UseErr%[1]d%[2]d[%[3]s any](fn func(context.Context)(%[3]s,error),pp Teleme
 	}
 }
 //UseOption%[1]d%[2]d add span when context contains Telemetry
-func UseOption%[1]d%[2]d[%[3]s any](fn func(context.Context)(%[3]s),sp SpanProviderFn) func(context.Context)(%[3]s) {
-	return func(ctx context.Context)(%[4]s) {
+func UseOption%[1]d%[2]d[%[3]s any](fn func(context.SpecContext)(%[3]s),sp SpanProviderFn) func(context.SpecContext)(%[3]s) {
+	return func(ctx context.SpecContext)(%[4]s) {
 		if t,s,cx := SpanFromContext(ctx,sp); s != nil {
 			defer func() {
 				defer s.End()
@@ -294,8 +294,8 @@ func UseOption%[1]d%[2]d[%[3]s any](fn func(context.Context)(%[3]s),sp SpanProvi
 	}
 }
 //UseOptionErr%[1]d%[2]d add span when context contains Telemetry
-func UseOptionErr%[1]d%[2]d[%[3]s any](fn func(context.Context)(%[3]s,error),sp SpanProviderFn) func(context.Context)(%[3]s,error) {
-	return func(ctx context.Context) (%[4]s,err error) {
+func UseOptionErr%[1]d%[2]d[%[3]s any](fn func(context.SpecContext)(%[3]s,error),sp SpanProviderFn) func(context.SpecContext)(%[3]s,error) {
+	return func(ctx context.SpecContext) (%[4]s,err error) {
 	if t,s,cx := SpanFromContext(ctx,sp); s != nil {
 			defer func() {
 				defer s.End()
@@ -351,8 +351,8 @@ func UseOptionErr%[1]d%[2]d[%[3]s any](fn func(context.Context)(%[3]s,error),sp 
 					}
 					_, _ = fmt.Fprintf(buf, `
 //Use%[1]d%[2]d add span when context not nil
-func Use%[1]d%[2]d[%[3]s,%[6]s any](fn func(context.Context,%[3]s)(%[6]s), pp TelemetryProviderFn,sp func(%[3]s)(string,[]attribute.KeyValue)) func(context.Context,%[3]s)(%[6]s) {
-	return func(ctx context.Context,%[4]s)(%[7]s) {
+func Use%[1]d%[2]d[%[3]s,%[6]s any](fn func(context.SpecContext,%[3]s)(%[6]s), pp TelemetryProviderFn,sp func(%[3]s)(string,[]attribute.KeyValue)) func(context.SpecContext,%[3]s)(%[6]s) {
+	return func(ctx context.SpecContext,%[4]s)(%[7]s) {
 		if t,cx := ByContext(ctx,pp); t != nil {
 			n,a:=sp(%[5]s)
 			cx,s:=t.StartSpan(n,cx,a...)
@@ -370,8 +370,8 @@ func Use%[1]d%[2]d[%[3]s,%[6]s any](fn func(context.Context,%[3]s)(%[6]s), pp Te
 	}
 }
 //UseErr%[1]d%[2]d add span when context not nil
-func UseErr%[1]d%[2]d[%[3]s,%[6]s any](fn func(context.Context,%[3]s)(%[6]s,error), pp TelemetryProviderFn,sp func(%[3]s)(string,[]attribute.KeyValue)) func(context.Context,%[3]s)(%[6]s,error) {
-	return func(ctx context.Context,%[4]s) (%[7]s,err error) {
+func UseErr%[1]d%[2]d[%[3]s,%[6]s any](fn func(context.SpecContext,%[3]s)(%[6]s,error), pp TelemetryProviderFn,sp func(%[3]s)(string,[]attribute.KeyValue)) func(context.SpecContext,%[3]s)(%[6]s,error) {
+	return func(ctx context.SpecContext,%[4]s) (%[7]s,err error) {
 		if t,cx := ByContext(ctx,pp); t != nil {
 			n,a:=sp(%[5]s)
 			cx,s:=t.StartSpan(n,cx,a...)
@@ -398,8 +398,8 @@ func UseErr%[1]d%[2]d[%[3]s,%[6]s any](fn func(context.Context,%[3]s)(%[6]s,erro
 	}
 }
 //UseOption%[1]d%[2]d add span when context have a Telemetry
-func UseOption%[1]d%[2]d[%[3]s,%[6]s any](fn func(context.Context,%[3]s)(%[6]s),sp func(%[3]s)(string,[]attribute.KeyValue)) func(context.Context,%[3]s)(%[6]s) {
-	return func(ctx context.Context,%[4]s)(%[7]s) {
+func UseOption%[1]d%[2]d[%[3]s,%[6]s any](fn func(context.SpecContext,%[3]s)(%[6]s),sp func(%[3]s)(string,[]attribute.KeyValue)) func(context.SpecContext,%[3]s)(%[6]s) {
+	return func(ctx context.SpecContext,%[4]s)(%[7]s) {
 		if t := FromContext(ctx); t != nil {
 			n,a:=sp(%[5]s)
 			cx,s:=t.StartSpan(n,ctx, a...)
@@ -417,8 +417,8 @@ func UseOption%[1]d%[2]d[%[3]s,%[6]s any](fn func(context.Context,%[3]s)(%[6]s),
 	}
 }
 //UseOptionErr%[1]d%[2]d add span when context have a Telemetry
-func UseOptionErr%[1]d%[2]d[%[3]s,%[6]s any](fn func(context.Context,%[3]s)(%[6]s,error),sp func(%[3]s)(string,[]attribute.KeyValue)) func(context.Context,%[3]s)(%[6]s,error) {
-	return func(ctx context.Context,%[4]s) (%[7]s,err error) {
+func UseOptionErr%[1]d%[2]d[%[3]s,%[6]s any](fn func(context.SpecContext,%[3]s)(%[6]s,error),sp func(%[3]s)(string,[]attribute.KeyValue)) func(context.SpecContext,%[3]s)(%[6]s,error) {
+	return func(ctx context.SpecContext,%[4]s) (%[7]s,err error) {
 		if t := FromContext(ctx); t != nil {
 			n,a:=sp(%[5]s)
 			cx,s:=t.StartSpan(n,ctx, a...)
