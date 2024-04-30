@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
+	"net/http"
 	"runtime"
 	"time"
 )
@@ -48,6 +49,9 @@ func ByContext(ctx context.Context, p TelemetryProviderFn) (r Telemetry, cx cont
 	if ctx == nil {
 		return nil, nil
 	}
+	if !HaveTelemetry() {
+		return nil, ctx
+	}
 	r, ok := ctx.Value(ContextKey).(Telemetry)
 	if !ok {
 		if p != nil {
@@ -60,11 +64,22 @@ func ByContext(ctx context.Context, p TelemetryProviderFn) (r Telemetry, cx cont
 	}
 	return r, ctx
 }
+func ByRequestContext(req *http.Request, p TelemetryProviderFn) (r Telemetry, rx *http.Request) {
+	var cx context.Context
+	r, cx = ByContext(req.Context(), p)
+	if cx != nil {
+		return r, req.WithContext(cx)
+	}
+	return nil, req
+}
 
 // SpanByContext create span with context Telemetry or create new one
 func SpanByContext(ctx context.Context, p TelemetryProviderFn, sn SpanProviderFn) (te Telemetry, sp trace.Span, cx context.Context) {
 	if ctx == nil {
 		return nil, nil, nil
+	}
+	if !HaveTelemetry() {
+		return nil, nil, ctx
 	}
 	var ok bool
 	te, ok = ctx.Value(ContextKey).(Telemetry)
@@ -84,6 +99,15 @@ func SpanByContext(ctx context.Context, p TelemetryProviderFn, sn SpanProviderFn
 		cx, sp = te.StartSpan(caller(), ctx)
 	}
 	return
+}
+func SpanByRequestContext(req *http.Request, p TelemetryProviderFn, sn SpanProviderFn) (te Telemetry, sp trace.Span, rx *http.Request) {
+	var cx context.Context
+	te, sp, cx = SpanByContext(req.Context(), p, sn)
+	if te != nil {
+		rx = req.WithContext(cx)
+		return
+	}
+	return nil, nil, req
 }
 
 // SpanFromContext create span only context have a Telemetry
@@ -164,50 +188,17 @@ func (t *telemetry) SetContext(ctx context.Context) context.Context {
 	}
 	return context.WithValue(ctx, ContextKey, t)
 }
+
+// NewTelemetry create Telemetry returns nil if not setup telemetry
 func NewTelemetry(scope string, opts ...trace.SpanStartOption) Telemetry {
+	if shutdown == nil {
+		return nil
+	}
 	return &telemetry{
 		spanStartOption: opts,
 		propagator:      otel.GetTextMapPropagator(),
 		meter:           otel.GetMeterProvider().Meter(scope, metric.WithInstrumentationVersion(Version)),
 		tracer:          otel.GetTracerProvider().Tracer(scope, trace.WithInstrumentationVersion(Version)),
-	}
-}
-
-type ServiceFunc func(ctx context.Context)
-
-// Instrument always start span except context is nil
-func Instrument(pn TelemetryProviderFn, sn SpanProviderFn, service ServiceFunc) ServiceFunc {
-	return func(ctx context.Context) {
-		if te, sp, cx := SpanByContext(ctx, pn, sn); sp != nil {
-			defer func() {
-				if r, ok := te.HandleRecover(recover()); ok {
-					panic(r)
-				}
-			}()
-			defer sp.End()
-			service(cx)
-		} else {
-			service(ctx)
-		}
-
-	}
-}
-
-// InstrumentOption only start span when context have Telemetry
-func InstrumentOption(sn SpanProviderFn, service ServiceFunc) ServiceFunc {
-	return func(ctx context.Context) {
-		if te, sp, cx := SpanFromContext(ctx, sn); sp != nil {
-			defer func() {
-				if r, ok := te.HandleRecover(recover()); ok {
-					panic(r)
-				}
-			}()
-			defer sp.End()
-			service(cx)
-		} else {
-			service(ctx)
-		}
-
 	}
 }
 
