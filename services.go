@@ -44,6 +44,25 @@ func FromContext(ctx context.Context) (r Telemetry) {
 	return r
 }
 
+// SpanFromContext create span only context have a Telemetry
+func SpanFromContext(ctx context.Context, sn SpanProviderFn) (te Telemetry, sp trace.Span, cx context.Context) {
+	if ctx == nil {
+		return nil, nil, nil
+	}
+	var ok bool
+	te, ok = ctx.Value(ContextKey).(Telemetry)
+	if !ok {
+		return nil, nil, ctx
+	}
+	if sn != nil {
+		n, a := sn()
+		cx, sp = te.StartSpan(n, ctx, a...)
+	} else {
+		cx, sp = te.StartSpan(caller(), ctx)
+	}
+	return
+}
+
 // ByContext fetch or create Telemetry from context
 func ByContext(ctx context.Context, p TelemetryProviderFn) (r Telemetry, cx context.Context) {
 	if ctx == nil {
@@ -108,25 +127,6 @@ func SpanByRequestContext(req *http.Request, p TelemetryProviderFn, sn SpanProvi
 		return
 	}
 	return nil, nil, req
-}
-
-// SpanFromContext create span only context have a Telemetry
-func SpanFromContext(ctx context.Context, sn SpanProviderFn) (te Telemetry, sp trace.Span, cx context.Context) {
-	if ctx == nil {
-		return nil, nil, nil
-	}
-	var ok bool
-	te, ok = ctx.Value(ContextKey).(Telemetry)
-	if !ok {
-		return nil, nil, ctx
-	}
-	if sn != nil {
-		n, a := sn()
-		cx, sp = te.StartSpan(n, ctx, a...)
-	} else {
-		cx, sp = te.StartSpan(caller(), ctx)
-	}
-	return
 }
 
 type Telemetry interface {
